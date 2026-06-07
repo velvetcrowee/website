@@ -1,431 +1,386 @@
 """
-Asya Port rıhtım takviminden gemi verisi çeker.
+Asya Port rıhtım verisini çeker ve cache'e kaydeder.
 
-Site Adobe Flash (Flex) kullanıyor. Flash uygulaması arka planda
-HTTP istekleri yaparak veri alıyor. Bu modül o veri endpoint'lerini
-deneyerek gemi bilgilerini elde etmeye çalışır.
+Flash sitesi liman ağından erişilebilir. Bu script Termux'ta çalışırken
+telefon liman WiFi'sindeyken veriyi çeker, cache klasörüne kaydeder.
+Sabah bildirimi cache'ten okunur - o an internete gerek yoktur.
 """
 
-import re
+import json
 import logging
+import os
+import re
+import xml.etree.ElementTree as ET
+from datetime import date, datetime, time, timedelta
+from dataclasses import dataclass, asdict
+from typing import Optional
+
 import requests
 from bs4 import BeautifulSoup
-from datetime import date, datetime, time
-from dataclasses import dataclass
-from typing import Optional
-import xml.etree.ElementTree as ET
 
-from config import PORT_BASE_URL, BERTH_CHART_PATH
+from config import PORT_BASE_URL, BERTH_CHART_PATH, DATA_URL, CACHE_DIR
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 SESSION = requests.Session()
 SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept": "text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,*/*;q=0.8",
-    "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
-    "Connection": "keep-alive",
+    "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36",
+    "Accept": "text/xml,application/xml,text/html,*/*;q=0.8",
+    "Accept-Language": "tr-TR,tr;q=0.9",
 })
 
 
+# ── Veri modeli ───────────────────────────────────────────────────────────────
+
 @dataclass
 class BerthEntry:
-    berth: str
-    ship_name: str
-    arrival: Optional[datetime]
-    departure: Optional[datetime]
-    agent: str = ""
-    load_info: str = ""   # DIS/YUK/AKTARMA gibi
+    berth:      str
+    ship_name:  str
+    arrival:    Optional[str]   # ISO datetime string ya da None
+    departure:  Optional[str]
+    agent:      str = ""
+    load_info:  str = ""
+
+    def arrival_dt(self) -> Optional[datetime]:
+        return datetime.fromisoformat(self.arrival) if self.arrival else None
+
+    def departure_dt(self) -> Optional[datetime]:
+        return datetime.fromisoformat(self.departure) if self.departure else None
 
     def is_active_during(self, start: datetime, end: datetime) -> bool:
-        """Gemi bu zaman aralığında limanda mı?"""
-        if self.arrival is None or self.departure is None:
+        a, d = self.arrival_dt(), self.departure_dt()
+        if not a or not d:
             return False
-        return self.arrival < end and self.departure > start
+        return a < end and d > start
 
     def departs_during(self, start: datetime, end: datetime) -> bool:
-        """Gemi bu zaman aralığında ayrılıyor mu?"""
-        if self.departure is None:
-            return False
-        return start <= self.departure <= end
+        d = self.departure_dt()
+        return bool(d and start <= d <= end)
 
     def arrives_during(self, start: datetime, end: datetime) -> bool:
-        """Gemi bu zaman aralığında geliyor mu?"""
-        if self.arrival is None:
-            return False
-        return start <= self.arrival <= end
+        a = self.arrival_dt()
+        return bool(a and start <= a <= end)
 
 
-def _try_xml_endpoint(target_date: date) -> Optional[list[BerthEntry]]:
-    """
-    Flash uygulamasının kullandığı XML endpoint'lerini dener.
-    Asya Port sistemi genellikle /report/berth/*.do şeklinde XML döner.
-    """
-    date_str = target_date.strftime("%Y%m%d")
-    year = target_date.strftime("%Y")
-    month = target_date.strftime("%m")
-    day = target_date.strftime("%d")
+# ── Cache ─────────────────────────────────────────────────────────────────────
 
-    candidates = [
-        f"{PORT_BASE_URL}/report/berth/BerthAllocationChart.do?date={date_str}",
-        f"{PORT_BASE_URL}/report/berth/getBerthData.do?date={date_str}",
-        f"{PORT_BASE_URL}/report/berth/berthChart.do?year={year}&month={month}&day={day}",
-        f"{PORT_BASE_URL}/eServicePage.do?menuName=report/berth/BerthAllocationChart&date={date_str}&format=xml",
-        f"{PORT_BASE_URL}/servlet/BerthAllocationChartServlet?date={date_str}",
-        f"{PORT_BASE_URL}/BerthData.do?date={date_str}",
-        f"{PORT_BASE_URL}/report/berth/data.do?date={date_str}",
-    ]
-
-    for url in candidates:
-        try:
-            resp = SESSION.get(url, timeout=10)
-            if resp.status_code == 200 and len(resp.text) > 100:
-                content = resp.text.strip()
-                # XML kontrolü
-                if content.startswith("<") and ("berth" in content.lower() or "vessel" in content.lower() or "ship" in content.lower()):
-                    logger.info(f"XML veri bulundu: {url}")
-                    return _parse_xml(content, target_date)
-                # JSON kontrolü
-                if content.startswith("{") or content.startswith("["):
-                    logger.info(f"JSON veri bulundu: {url}")
-                    return _parse_json(content, target_date)
-        except Exception as e:
-            logger.debug(f"URL denemesi başarısız {url}: {e}")
-
-    return None
+def _cache_path(d: date) -> str:
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    return os.path.join(CACHE_DIR, f"{d.isoformat()}.json")
 
 
-def _try_main_page(target_date: date) -> Optional[list[BerthEntry]]:
-    """Ana sayfayı çekerek Flash parametrelerini ve veri URL'lerini arar."""
+def _save_cache(d: date, entries: list[BerthEntry]):
+    with open(_cache_path(d), "w", encoding="utf-8") as f:
+        json.dump([asdict(e) for e in entries], f, ensure_ascii=False, indent=2)
+    log.info(f"Cache kaydedildi: {_cache_path(d)} ({len(entries)} gemi)")
+
+
+def _load_cache(d: date) -> Optional[list[BerthEntry]]:
+    path = _cache_path(d)
+    if not os.path.exists(path):
+        return None
     try:
-        url = f"{PORT_BASE_URL}{BERTH_CHART_PATH}"
-        params = {
-            "menuName": "report/berth/BerthAllocationChart",
-            "webuserid": "",
-        }
-        resp = SESSION.get(url, params=params, timeout=10)
-
-        if resp.status_code != 200:
-            return None
-
-        soup = BeautifulSoup(resp.text, "html.parser")
-
-        # Flash embed parametrelerini ara
-        for obj in soup.find_all(["object", "embed"]):
-            flashvars = obj.get("flashvars") or obj.get("value", "")
-            if "berth" in str(flashvars).lower() or "chart" in str(flashvars).lower():
-                logger.info(f"Flash parametreleri bulundu: {flashvars}")
-                data_url = _extract_data_url(str(flashvars))
-                if data_url:
-                    return _fetch_data_url(data_url, target_date)
-
-        # Sayfada doğrudan XML/JSON veri var mı?
-        for script in soup.find_all("script"):
-            if script.string and ("berth" in script.string.lower() or "vessel" in script.string.lower()):
-                entries = _parse_inline_script(script.string, target_date)
-                if entries:
-                    return entries
-
-        # iframe içinde veri olabilir
-        for iframe in soup.find_all("iframe"):
-            src = iframe.get("src", "")
-            if "berth" in src.lower() or "chart" in src.lower():
-                full_url = src if src.startswith("http") else f"{PORT_BASE_URL}{src}"
-                try:
-                    iframe_resp = SESSION.get(full_url, timeout=10)
-                    if iframe_resp.status_code == 200:
-                        entries = _parse_html_table(iframe_resp.text, target_date)
-                        if entries:
-                            return entries
-                except Exception:
-                    pass
-
-        # HTML'de tablo var mı?
-        return _parse_html_table(resp.text, target_date)
-
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return [BerthEntry(**row) for row in data]
     except Exception as e:
-        logger.error(f"Ana sayfa çekme hatası: {e}")
+        log.warning(f"Cache okunamadı: {e}")
         return None
 
 
-def _extract_data_url(flashvars: str) -> Optional[str]:
-    """flashvars string'inden data URL'i çıkarır."""
-    patterns = [
-        r"dataURL=([^&\"']+)",
-        r"xmlURL=([^&\"']+)",
-        r"serviceURL=([^&\"']+)",
-        r"dataUrl=([^&\"']+)",
-    ]
-    for pat in patterns:
-        m = re.search(pat, flashvars)
-        if m:
-            return m.group(1)
-    return None
+def cache_exists(d: date) -> bool:
+    return os.path.exists(_cache_path(d))
 
 
-def _fetch_data_url(data_url: str, target_date: date) -> Optional[list[BerthEntry]]:
-    """Bulunan data URL'ini çeker ve parse eder."""
-    if not data_url.startswith("http"):
-        data_url = f"{PORT_BASE_URL}{data_url}"
+# ── HTTP çekme ────────────────────────────────────────────────────────────────
+
+def _get(url: str, params: dict = None, timeout: int = 10) -> Optional[requests.Response]:
     try:
-        resp = SESSION.get(data_url, timeout=10)
-        if resp.status_code == 200:
-            return _parse_xml(resp.text, target_date) or _parse_json(resp.text, target_date)
+        r = SESSION.get(url, params=params, timeout=timeout)
+        if r.status_code == 200:
+            return r
     except Exception as e:
-        logger.error(f"Data URL çekme hatası: {e}")
+        log.debug(f"GET hatası {url}: {e}")
     return None
 
 
-def _parse_xml(content: str, target_date: date) -> Optional[list[BerthEntry]]:
-    """XML response'u BerthEntry listesine dönüştürür."""
+# ── Tarih-saat parse ──────────────────────────────────────────────────────────
+
+_DT_FORMATS = [
+    "%Y%m%d%H%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+    "%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M", "%m/%d/%Y %H:%M",
+    "%Y%m%d %H:%M", "%Y%m%d",
+]
+
+def _parse_dt(s: str, ref: date) -> Optional[datetime]:
+    if not s:
+        return None
+    for fmt in _DT_FORMATS:
+        try:
+            dt = datetime.strptime(s.strip(), fmt)
+            if dt.year == 1900:
+                dt = dt.replace(year=ref.year, month=ref.month, day=ref.day)
+            return dt
+        except ValueError:
+            pass
+    # Unix timestamp
+    try:
+        return datetime.fromtimestamp(int(s))
+    except (ValueError, OSError, OverflowError):
+        pass
+    return None
+
+
+# ── XML parse ────────────────────────────────────────────────────────────────
+
+def _attr(node, *keys) -> str:
+    for k in keys:
+        v = node.get(k) or node.findtext(k)
+        if v:
+            return str(v).strip()
+    return ""
+
+
+def _xml_to_entries(content: str, ref: date) -> list[BerthEntry]:
+    entries = []
     try:
         root = ET.fromstring(content)
-        entries = []
+    except ET.ParseError:
+        return entries
 
-        # Farklı XML yapılarını dene
-        for node in root.iter():
-            tag = node.tag.lower()
-            if any(k in tag for k in ["berth", "vessel", "ship", "allocation"]):
-                entry = _xml_node_to_entry(node, target_date)
-                if entry:
-                    entries.append(entry)
-
-        return entries if entries else None
-    except ET.ParseError as e:
-        logger.debug(f"XML parse hatası: {e}")
-        return None
-
-
-def _xml_node_to_entry(node, target_date: date) -> Optional[BerthEntry]:
-    """XML node'u BerthEntry'ye çevirir."""
-    def get(keys):
-        for k in keys:
-            v = node.get(k) or node.findtext(k)
-            if v:
-                return v.strip()
-        return ""
-
-    berth = get(["berth", "berthName", "berthNo", "pier"])
-    ship = get(["vesselName", "shipName", "vessel", "ship", "name"])
-    arrival_str = get(["arrivalTime", "arrival", "eta", "berthedTime"])
-    departure_str = get(["departureTime", "departure", "etd", "unBerthedTime"])
-    agent = get(["agent", "agentName", "lineAgent"])
-    load_info = get(["loadInfo", "container", "containers"])
-
-    if not ship:
-        return None
-
-    arrival = _parse_datetime(arrival_str, target_date)
-    departure = _parse_datetime(departure_str, target_date)
-
-    return BerthEntry(berth=berth, ship_name=ship, arrival=arrival,
-                      departure=departure, agent=agent, load_info=load_info)
+    for node in root.iter():
+        tag = node.tag.lower().split("}")[-1]
+        if not any(k in tag for k in ("berth", "vessel", "ship", "alloc", "plan")):
+            continue
+        ship = _attr(node, "vesselName", "shipName", "vessel", "ship", "name", "VESSEL_NAME", "VesselName")
+        if not ship:
+            continue
+        arr_s = _attr(node, "arrivalTime", "arrival", "eta", "ETA", "berthedTime", "ARRIVAL")
+        dep_s = _attr(node, "departureTime", "departure", "etd", "ETD", "unBerthedTime", "DEPARTURE")
+        entries.append(BerthEntry(
+            berth=_attr(node, "berth", "berthName", "berthNo", "pier", "BERTH"),
+            ship_name=ship,
+            arrival=_parse_dt(arr_s, ref).isoformat() if _parse_dt(arr_s, ref) else None,
+            departure=_parse_dt(dep_s, ref).isoformat() if _parse_dt(dep_s, ref) else None,
+            agent=_attr(node, "agent", "agentName", "AGENT"),
+            load_info=_attr(node, "loadInfo", "containers", "LOAD"),
+        ))
+    return entries
 
 
-def _parse_json(content: str, target_date: date) -> Optional[list[BerthEntry]]:
-    """JSON response'u parse eder."""
-    import json
-    try:
-        data = json.loads(content)
-        entries = []
-        items = data if isinstance(data, list) else data.get("data", data.get("list", data.get("rows", [])))
-        for item in items:
-            entry = _dict_to_entry(item, target_date)
-            if entry:
-                entries.append(entry)
-        return entries if entries else None
-    except Exception as e:
-        logger.debug(f"JSON parse hatası: {e}")
-        return None
+# ── JSON parse ───────────────────────────────────────────────────────────────
 
-
-def _dict_to_entry(d: dict, target_date: date) -> Optional[BerthEntry]:
-    def get(keys):
+def _dict_to_entry(d: dict, ref: date) -> Optional[BerthEntry]:
+    def g(*keys):
         for k in keys:
             if k in d:
                 return str(d[k]).strip()
         return ""
-
-    ship = get(["vesselName", "shipName", "vessel", "ship", "name", "VESSEL_NAME"])
+    ship = g("vesselName", "shipName", "vessel", "ship", "name", "VESSEL_NAME")
     if not ship:
         return None
-
-    berth = get(["berth", "berthName", "berthNo", "BERTH_NAME"])
-    arrival_str = get(["arrivalTime", "arrival", "eta", "ETA", "ARRIVAL"])
-    departure_str = get(["departureTime", "departure", "etd", "ETD", "DEPARTURE"])
-    agent = get(["agent", "agentName", "AGENT"])
-    load_info = get(["loadInfo", "containers", "LOAD_INFO"])
-
+    arr_s = g("arrivalTime", "arrival", "eta", "ETA", "ARRIVAL")
+    dep_s = g("departureTime", "departure", "etd", "ETD", "DEPARTURE")
+    arr_dt = _parse_dt(arr_s, ref)
+    dep_dt = _parse_dt(dep_s, ref)
     return BerthEntry(
-        berth=berth,
+        berth=g("berth", "berthName", "berthNo", "BERTH"),
         ship_name=ship,
-        arrival=_parse_datetime(arrival_str, target_date),
-        departure=_parse_datetime(departure_str, target_date),
-        agent=agent,
-        load_info=load_info,
+        arrival=arr_dt.isoformat() if arr_dt else None,
+        departure=dep_dt.isoformat() if dep_dt else None,
+        agent=g("agent", "agentName", "AGENT"),
+        load_info=g("loadInfo", "containers"),
     )
 
 
-def _parse_html_table(html: str, target_date: date) -> Optional[list[BerthEntry]]:
-    """HTML tablo varsa parse eder."""
+def _json_to_entries(content: str, ref: date) -> list[BerthEntry]:
+    try:
+        data = json.loads(content)
+        items = data if isinstance(data, list) else \
+                data.get("data", data.get("list", data.get("rows", data.get("result", []))))
+        return [e for e in (_dict_to_entry(i, ref) for i in items) if e]
+    except Exception:
+        return []
+
+
+# ── HTML tablo parse ──────────────────────────────────────────────────────────
+
+def _html_to_entries(html: str, ref: date) -> list[BerthEntry]:
     soup = BeautifulSoup(html, "html.parser")
-    tables = soup.find_all("table")
     entries = []
-    for table in tables:
+    for table in soup.find_all("table"):
         rows = table.find_all("tr")
         if len(rows) < 2:
             continue
-        headers = [th.get_text(strip=True).lower() for th in rows[0].find_all(["th", "td"])]
-        if not any(k in " ".join(headers) for k in ["vessel", "ship", "gemi", "berth"]):
+        hdrs = [th.get_text(strip=True).lower() for th in rows[0].find_all(["th", "td"])]
+        if not any(k in " ".join(hdrs) for k in ("vessel", "ship", "gemi", "berth", "rıhtım")):
             continue
         for row in rows[1:]:
             cells = [td.get_text(strip=True) for td in row.find_all("td")]
             if len(cells) < 2:
                 continue
-            entry = _cells_to_entry(headers, cells, target_date)
-            if entry:
-                entries.append(entry)
-    return entries if entries else None
+            def gc(*keys):
+                for k in keys:
+                    for i, h in enumerate(hdrs):
+                        if k in h and i < len(cells):
+                            return cells[i]
+                return ""
+            ship = gc("vessel", "ship", "gemi", "name")
+            if not ship:
+                continue
+            arr_s = gc("arrival", "eta", "geliş", "gelir")
+            dep_s = gc("departure", "etd", "gidiş", "çıkış", "ayrılır")
+            arr_dt = _parse_dt(arr_s, ref)
+            dep_dt = _parse_dt(dep_s, ref)
+            entries.append(BerthEntry(
+                berth=gc("berth", "pier", "iskele", "rıhtım"),
+                ship_name=ship,
+                arrival=arr_dt.isoformat() if arr_dt else None,
+                departure=dep_dt.isoformat() if dep_dt else None,
+                agent=gc("agent", "acente"),
+                load_info=gc("load", "container", "konteyner"),
+            ))
+    return entries
 
 
-def _cells_to_entry(headers, cells, target_date: date) -> Optional[BerthEntry]:
-    def get(keys):
-        for k in keys:
-            for i, h in enumerate(headers):
-                if k in h and i < len(cells):
-                    return cells[i]
-        return ""
+# ── Endpoint deneme ───────────────────────────────────────────────────────────
 
-    ship = get(["vessel", "ship", "gemi", "name"])
-    if not ship:
-        return None
+def _probe_candidates(target: date) -> list[BerthEntry]:
+    ds = target.strftime("%Y%m%d")
+    y, m, d = target.year, f"{target.month:02d}", f"{target.day:02d}"
 
-    return BerthEntry(
-        berth=get(["berth", "pier", "iskele", "rıhtım"]),
-        ship_name=ship,
-        arrival=_parse_datetime(get(["arrival", "eta", "geliş"]), target_date),
-        departure=_parse_datetime(get(["departure", "etd", "gidiş", "çıkış"]), target_date),
-        agent=get(["agent", "acente"]),
-        load_info=get(["load", "container", "konteyner"]),
-    )
+    # Önce config'deki DATA_URL'i dene
+    urls = []
+    if DATA_URL:
+        urls.append((DATA_URL, {"date": ds}))
 
-
-def _parse_inline_script(script: str, target_date: date) -> Optional[list[BerthEntry]]:
-    """Script içindeki inline JSON/veriyi parse eder."""
-    import json
-    patterns = [
-        r"var\s+berthData\s*=\s*(\[.*?\]);",
-        r"var\s+vessels\s*=\s*(\[.*?\]);",
-        r"chartData\s*=\s*(\[.*?\]);",
+    urls += [
+        (f"{PORT_BASE_URL}/report/berth/BerthAllocationChartData.do", {"date": ds}),
+        (f"{PORT_BASE_URL}/report/berth/getBerthData.do",             {"date": ds}),
+        (f"{PORT_BASE_URL}/report/berth/BerthAllocationChart.do",     {"date": ds}),
+        (f"{PORT_BASE_URL}/BerthAllocationChartData.do",              {"date": ds}),
+        (f"{PORT_BASE_URL}/report/berth/vesselList.do",               {"date": ds}),
+        (f"{PORT_BASE_URL}/eServicePage.do", {
+            "menuName": "report/berth/BerthAllocationChart",
+            "date": ds, "webuserid": "", "format": "xml"}),
+        (f"{PORT_BASE_URL}/report/berth/BerthAllocationChart.do",     {"year": y, "month": m, "day": d}),
+        (f"{PORT_BASE_URL}/xml/BerthAllocationChart.xml",             {"date": ds}),
+        (f"{PORT_BASE_URL}/api/berth/chart",                          {"date": ds}),
     ]
-    for pat in patterns:
-        m = re.search(pat, script, re.DOTALL)
-        if m:
-            try:
-                data = json.loads(m.group(1))
-                entries = [_dict_to_entry(item, target_date) for item in data]
-                return [e for e in entries if e]
-            except Exception:
-                pass
-    return None
+
+    for url, params in urls:
+        r = _get(url, params)
+        if not r:
+            continue
+        ct = r.headers.get("Content-Type", "")
+        body = r.text.strip()
+
+        if not body or len(body) < 30:
+            continue
+
+        # XML
+        if body.startswith("<") or "xml" in ct:
+            entries = _xml_to_entries(body, target)
+            if entries:
+                log.info(f"XML veri alındı: {url} ({len(entries)} gemi)")
+                return entries
+
+        # JSON
+        if body[0] in "{[" or "json" in ct:
+            entries = _json_to_entries(body, target)
+            if entries:
+                log.info(f"JSON veri alındı: {url} ({len(entries)} gemi)")
+                return entries
+
+        # HTML tablo
+        entries = _html_to_entries(body, target)
+        if entries:
+            log.info(f"HTML tablo alındı: {url} ({len(entries)} gemi)")
+            return entries
+
+    return []
 
 
-def _parse_datetime(s: str, reference_date: date) -> Optional[datetime]:
-    """Çeşitli formatlardaki tarih-saat string'ini datetime'a çevirir."""
-    if not s:
-        return None
+def _probe_main_page(target: date) -> list[BerthEntry]:
+    """Ana sayfadan Flash parametrelerini okur, veri URL'i bulursa çeker."""
+    r = _get(f"{PORT_BASE_URL}{BERTH_CHART_PATH}", {
+        "menuName": "report/berth/BerthAllocationChart",
+        "webuserid": "",
+    })
+    if not r:
+        return []
 
-    formats = [
-        "%Y%m%d%H%M",
-        "%Y-%m-%d %H:%M",
-        "%Y-%m-%dT%H:%M:%S",
-        "%d/%m/%Y %H:%M",
-        "%m/%d/%Y %H:%M",
-        "%Y%m%d %H:%M",
-        "%H:%M",   # sadece saat - bugünün tarihi ile birleştirilir
-        "%H%M",
-    ]
-    for fmt in formats:
-        try:
-            dt = datetime.strptime(s.strip(), fmt)
-            # Sadece saat verildiyse referans tarihe ekle
-            if dt.year == 1900:
-                dt = dt.replace(year=reference_date.year,
-                                month=reference_date.month,
-                                day=reference_date.day)
-            return dt
-        except ValueError:
-            pass
+    soup = BeautifulSoup(r.text, "html.parser")
 
-    # Unix timestamp dene
-    try:
-        ts = int(s)
-        return datetime.fromtimestamp(ts)
-    except (ValueError, OSError):
-        pass
+    # flashvars / data-url'i ara
+    for tag in soup.find_all(["object", "embed", "param"]):
+        for attr in ["flashvars", "value", "src", "data"]:
+            val = tag.get(attr, "")
+            if not val:
+                continue
+            m = re.search(r"(?:dataURL|xmlURL|serviceURL|dataUrl)=([^&\"'\s]+)", val)
+            if m:
+                data_url = m.group(1)
+                if not data_url.startswith("http"):
+                    data_url = PORT_BASE_URL + data_url
+                sub = _get(data_url, {"date": target.strftime("%Y%m%d")})
+                if sub:
+                    entries = _xml_to_entries(sub.text, target) or \
+                              _json_to_entries(sub.text, target)
+                    if entries:
+                        log.info(f"flashvars data URL'den veri: {data_url}")
+                        return entries
 
-    return None
+    # Sayfanın kendisi HTML tablo içeriyor olabilir
+    return _html_to_entries(r.text, target)
 
 
-def get_berth_entries(target_date: date = None) -> tuple[list[BerthEntry], str]:
+# ── Dışa açık API ─────────────────────────────────────────────────────────────
+
+def fetch_entries(target: date) -> tuple[list[BerthEntry], str]:
     """
-    Gemi verilerini çeker.
-
-    Returns:
-        (entries, source) - entries: gemi listesi, source: veri kaynağı açıklaması
+    Önce cache'e bakar, yoksa canlıdan çeker.
+    Returns (entries, source).
     """
-    if target_date is None:
-        target_date = date.today()
+    cached = _load_cache(target)
+    if cached is not None:
+        log.info(f"{target} cache'ten okundu ({len(cached)} gemi).")
+        return cached, "cache"
 
-    # 1. XML endpoint dene
-    entries = _try_xml_endpoint(target_date)
+    return fetch_live(target)
+
+
+def fetch_live(target: date) -> tuple[list[BerthEntry], str]:
+    """Cache'e bakmadan canlıdan çeker, başarılı olursa cache'e kaydeder."""
+    entries = _probe_candidates(target) or _probe_main_page(target)
     if entries:
-        return entries, "xml_endpoint"
-
-    # 2. Ana sayfadan parse et
-    entries = _try_main_page(target_date)
-    if entries:
-        return entries, "main_page"
-
+        _save_cache(target, entries)
+        return entries, "live"
     return [], "no_data"
 
 
-def get_shift_report(target_date: date, shift_start_hour: int = 8, shift_end_hour: int = 16) -> dict:
+def get_shift_report(target: date, start_h: int = 8, end_h: int = 16) -> dict:
+    entries, source = fetch_entries(target)
+
+    shift_start = datetime.combine(target, time(start_h, 0))
+    shift_end   = datetime.combine(target, time(end_h,   0))
+
+    return {
+        "date":      target,
+        "source":    source,
+        "error":     None if entries or source == "no_data" else "fetch_failed",
+        "at_port":   [e for e in entries if e.is_active_during(shift_start, shift_end)],
+        "departing": [e for e in entries if e.departs_during(shift_start, shift_end)],
+        "arriving":  [e for e in entries if e.arrives_during(shift_start, shift_end)],
+    }
+
+
+def prefetch_tomorrow(target: date = None) -> tuple[int, str]:
     """
-    Vardiya raporu hazırlar.
-
-    Returns dict:
-      - at_port: shift başında limanda olan gemiler
-      - departing: shift süresince ayrılacak gemiler
-      - arriving: shift süresince gelecek gemiler
-      - source: veri kaynağı
-      - error: hata varsa mesajı
+    Ertesi günün verisini önceden çeker ve cache'e kaydeder.
+    Vardiya biterken (18:00) çalışır - o an liman WiFi'sinde olmak gerekir.
+    Returns (gemi_sayısı, kaynak).
     """
-    try:
-        entries, source = get_berth_entries(target_date)
-
-        shift_dt_start = datetime.combine(target_date, time(shift_start_hour, 0))
-        shift_dt_end = datetime.combine(target_date, time(shift_end_hour, 0))
-
-        at_port = [e for e in entries if e.is_active_during(shift_dt_start, shift_dt_end)]
-        departing = [e for e in entries if e.departs_during(shift_dt_start, shift_dt_end)]
-        arriving = [e for e in entries if e.arrives_during(shift_dt_start, shift_dt_end)]
-
-        return {
-            "at_port": at_port,
-            "departing": departing,
-            "arriving": arriving,
-            "source": source,
-            "error": None,
-            "date": target_date,
-        }
-    except Exception as e:
-        logger.error(f"Rapor hazırlama hatası: {e}", exc_info=True)
-        return {
-            "at_port": [],
-            "departing": [],
-            "arriving": [],
-            "source": "error",
-            "error": str(e),
-            "date": target_date,
-        }
+    tomorrow = (target or date.today()) + timedelta(days=1)
+    entries, source = fetch_live(tomorrow)
+    return len(entries), source

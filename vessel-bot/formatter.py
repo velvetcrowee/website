@@ -1,94 +1,89 @@
-"""Gemi verilerini Türkçe Telegram mesajına dönüştürür."""
-
 from datetime import date, datetime
 from scraper import BerthEntry
-from shift_manager import format_date_tr, TURKISH_DAYS, TURKISH_MONTHS
+from shift_manager import format_date_tr
 
 
-def _fmt_time(dt: datetime | None) -> str:
-    if dt is None:
+def _t(dt_iso: str | None) -> str:
+    if not dt_iso:
         return "?"
-    return dt.strftime("%d/%m %H:%M")
+    try:
+        dt = datetime.fromisoformat(dt_iso)
+        return dt.strftime("%d/%m %H:%M")
+    except Exception:
+        return dt_iso
 
 
-def _ship_line(entry: BerthEntry, note: str = "") -> str:
-    parts = [f"• *{entry.ship_name}*"]
-    if entry.berth:
-        parts.append(f"({entry.berth})")
-    if entry.departure:
-        parts.append(f"→ çıkış: {_fmt_time(entry.departure)}")
-    if entry.agent:
-        parts.append(f"[{entry.agent}]")
-    if note:
-        parts.append(note)
+def _line(e: BerthEntry) -> str:
+    parts = [f"• *{e.ship_name}*"]
+    if e.berth:
+        parts.append(f"({e.berth})")
+    if e.departure:
+        parts.append(f"→ çıkış: {_t(e.departure)}")
+    if e.agent:
+        parts.append(f"[{e.agent}]")
     return " ".join(parts)
 
 
 def build_shift_message(report: dict) -> str:
-    target_date: date = report["date"]
-    at_port: list[BerthEntry] = report["at_port"]
-    departing: list[BerthEntry] = report["departing"]
-    arriving: list[BerthEntry] = report["arriving"]
-    error: str | None = report["error"]
+    d: date                  = report["date"]
+    source: str              = report["source"]
+    at_port: list[BerthEntry]  = report.get("at_port",   [])
+    departing: list[BerthEntry]= report.get("departing", [])
+    arriving: list[BerthEntry] = report.get("arriving",  [])
 
-    lines = []
-    lines.append(f"🚢 *Asya Port Vardiya Raporu*")
-    lines.append(f"📅 {format_date_tr(target_date)} — 08:00–16:00")
-    lines.append("")
+    lines = [
+        "🚢 *Asya Port Vardiya Raporu*",
+        f"📅 {format_date_tr(d)} — 08:00–16:00",
+        "",
+    ]
 
-    if error:
-        lines.append(f"⚠️ Veri çekilemedi: `{error}`")
-        lines.append("")
-        lines.append("Limanın web sitesi Flash kullandığı için otomatik veri alınamıyor.")
-        lines.append("Lütfen siteyi manuel olarak kontrol edin:")
-        lines.append(f"`http://195.142.119.165:9120/eServicePage.do?menuName=report/berth/BerthAllocationChart`")
+    if source == "no_data":
+        lines += [
+            "⚠️ Veri çekilemedi.",
+            "",
+            "Ne yapabilirsiniz:",
+            "• /prefetch — Liman WiFi'sinde iken veriyi çek",
+            "• /gemi\\_ekle — Gemileri manuel gir",
+            "• Siteyi açın: `http://195.142.119.165:9120/eServicePage.do?menuName=report/berth/BerthAllocationChart`",
+        ]
         return "\n".join(lines)
+
+    if source == "cache":
+        lines.append("_(Önceden kaydedilmiş veri)_\n")
 
     if not at_port and not departing and not arriving:
-        lines.append("ℹ️ Vardiya saatlerinde limanda gemi bilgisi bulunamadı.")
-        lines.append("")
-        lines.append("Veri sistemi erişilebilir değil ya da bugün gemi yok.")
+        lines.append("✅ Bu vardiyada limanda gemi yok.")
         return "\n".join(lines)
 
-    # Vardiyada limanda olan gemiler
     if at_port:
-        lines.append(f"⚓ *Vardiyada limanda olan gemiler ({len(at_port)} adet):*")
-        for entry in at_port:
-            lines.append(_ship_line(entry))
-        lines.append("")
-    else:
-        lines.append("⚓ Vardiyada limanda gemi yok.")
+        lines.append(f"⚓ *Limanda olacak ({len(at_port)} gemi):*")
+        lines += [_line(e) for e in at_port]
         lines.append("")
 
-    # Vardiyada ayrılacak gemiler
     if departing:
-        lines.append(f"🟡 *Vardiyanda ayrılacak gemiler ({len(departing)} adet):*")
-        for entry in departing:
-            lines.append(_ship_line(entry))
+        lines.append(f"🟡 *Vardiyanda ayrılacak ({len(departing)} gemi):*")
+        lines += [_line(e) for e in departing]
         lines.append("")
     else:
-        lines.append("✅ Vardiyanda ayrılacak gemi *yok*.")
+        lines.append("✅ Vardiyanda *ayrılacak gemi yok*.")
         lines.append("")
 
-    # Vardiyada gelecek gemiler
     if arriving:
-        lines.append(f"🟢 *Vardiyanda gelecek gemiler ({len(arriving)} adet):*")
-        for entry in arriving:
-            arrival_str = _fmt_time(entry.arrival)
-            lines.append(f"• *{entry.ship_name}* ({entry.berth}) → geliş: {arrival_str} [{entry.agent}]")
-        lines.append("")
+        lines.append(f"🟢 *Vardiyanda gelecek ({len(arriving)} gemi):*")
+        for e in arriving:
+            parts = [f"• *{e.ship_name}*"]
+            if e.berth:  parts.append(f"({e.berth})")
+            if e.arrival: parts.append(f"→ geliş: {_t(e.arrival)}")
+            if e.agent:  parts.append(f"[{e.agent}]")
+            lines.append(" ".join(parts))
 
     return "\n".join(lines)
 
 
-def build_no_shift_message(target_date: date) -> str:
-    return f"📅 {format_date_tr(target_date)} — Bugün vardiya günü değil."
-
-
 def build_shifts_list(shifts: list[date]) -> str:
     if not shifts:
-        return "📋 Kayıtlı vardiya günü yok.\n/vardiya\\_ekle YYYY-MM-DD komutuyla ekleyin."
-    lines = ["📋 *Yaklaşan vardiya günleri:*", ""]
+        return "📋 Kayıtlı vardiya yok.\n/vardiya\\_ekle YYYY-MM-DD ile ekleyin."
+    lines = ["📋 *Yaklaşan vardiyalar:*", ""]
     for d in shifts:
         lines.append(f"• {format_date_tr(d)}")
     return "\n".join(lines)
