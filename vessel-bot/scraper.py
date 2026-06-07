@@ -335,6 +335,51 @@ def _probe_main_page(target: date) -> list[BerthEntry]:
     return _html_to_entries(r.text, target)
 
 
+# ── AMF3 kaynak ───────────────────────────────────────────────────────────────
+
+def _amf_time(val, ref: date) -> Optional[datetime]:
+    """Convert AMF3 Date (ms float) or string to datetime."""
+    if val is None:
+        return None
+    if isinstance(val, (int, float)) and val > 0:
+        try:
+            return datetime.fromtimestamp(val / 1000)
+        except (OSError, OverflowError, ValueError):
+            pass
+    return _parse_dt(str(val), ref)
+
+
+def _amf_to_entries(vessels: list[dict], ref: date) -> list[BerthEntry]:
+    """Convert BerthChartVO dicts from AMF3 decoder into BerthEntry list."""
+    entries = []
+    for v in vessels:
+        def g(*keys):
+            for k in keys:
+                val = v.get(k)
+                if val is not None and str(val).strip() not in ('', 'null', 'None', '0', '0.0'):
+                    return str(val).strip()
+            return ''
+
+        ship = g('vessel', 'vesselName', 'vslNm', 'shipNm', 'shipName', 'name')
+        if not ship:
+            continue
+
+        arr_dt = _amf_time(
+            v.get('berthTime') or v.get('arrivalTime') or v.get('eta'), ref)
+        dep_dt = _amf_time(
+            v.get('depatureTimeS') or v.get('departureTime') or v.get('etd'), ref)
+
+        entries.append(BerthEntry(
+            berth=g('berthno', 'berthName', 'berth', 'pier'),
+            ship_name=ship,
+            arrival=arr_dt.isoformat() if arr_dt else None,
+            departure=dep_dt.isoformat() if dep_dt else None,
+            agent=g('agent', 'agentName'),
+            load_info=g('berthside', 'outservice', 'loadInfo'),
+        ))
+    return entries
+
+
 # ── Dışa açık API ─────────────────────────────────────────────────────────────
 
 def fetch_entries(target: date) -> tuple[list[BerthEntry], str]:
@@ -352,6 +397,20 @@ def fetch_entries(target: date) -> tuple[list[BerthEntry], str]:
 
 def fetch_live(target: date) -> tuple[list[BerthEntry], str]:
     """Cache'e bakmadan canlıdan çeker, başarılı olursa cache'e kaydeder."""
+    # Primary: BlazeDS AMF3 protocol (Flash arka-uç)
+    try:
+        from amf_client import get_vessels
+        vessels = get_vessels(target.year, target.month, target.day)
+        if vessels:
+            entries = _amf_to_entries(vessels, target)
+            if entries:
+                _save_cache(target, entries)
+                log.info(f"AMF3 verisi alındı: {len(entries)} gemi")
+                return entries, "amf3"
+    except Exception as e:
+        log.warning(f"AMF3 çekme hatası: {e}")
+
+    # Fallback: HTTP endpoint probing
     entries = _probe_candidates(target) or _probe_main_page(target)
     if entries:
         _save_cache(target, entries)
