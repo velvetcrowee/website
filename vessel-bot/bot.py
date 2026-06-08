@@ -114,7 +114,12 @@ async def cmd_yardim(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/vardiya\\_sil 2026-06-08 — gün sil\n\n"
         "*Raporlar:*\n"
         "/kontrol — bugünkü raporu canlı çek\n"
-        "/prefetch — yarınki veriyi şimdi çek _(liman WiFi'sinde ol)_\n\n"
+        "/rapor — gün + vardiya sorgula\n"
+        "  örn: /rapor yarin 8 4 _(yarın 08:00–16:00)_\n"
+        "  örn: /rapor 4 12 _(bugün 16:00–24:00)_\n"
+        "  örn: /rapor 2026-06-10 gece\n"
+        "  vardiyalar: 8-4, 4-12, 12-8 ya da düz saat (16 24)\n"
+        "/prefetch — yarınki veriyi şimdi çek\n\n"
         "*Manuel gemi girişi _(scraping çalışmıyorsa):_*\n"
         "/gemi\\_ekle MSC BELLA BERTH2 06:00 20:00 NAF\n"
         "  format: /gemi\\_ekle GemiAdı Rıhtım Geliş Çıkış Acente\n"
@@ -183,6 +188,95 @@ async def cmd_kontrol(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             datetime.combine(today, __import__("datetime").time(config.SHIFT_START_HOUR)),
             datetime.combine(today, __import__("datetime").time(config.SHIFT_END_HOUR)))]
 
+    await update.message.reply_text(
+        build_shift_message(report), parse_mode="Markdown"
+    )
+
+
+# ── Esnek vardiya sorgusu ─────────────────────────────────────────────────────
+
+# Türkiye'deki klasik 3 vardiya: 8-4 / 4-12 / 12-8  (sözel kısaltma -> 24 saat)
+_SHIFT_ALIASES = {
+    (8, 4):  (8, 16),  (8, 16):  (8, 16),
+    (4, 12): (16, 24), (16, 24): (16, 24),
+    (12, 8): (0, 8),   (0, 8):   (0, 8),  (24, 8): (0, 8),
+}
+_SHIFT_NAMES = {
+    "gunduz": (8, 16), "gündüz": (8, 16),
+    "aksam":  (16, 24), "akşam":  (16, 24),
+    "gece":   (0, 8),
+}
+
+
+def _resolve_shift(nums: list[int]) -> tuple[int, int]:
+    """İki saat sayısını 24-saatlik (start, end) vardiya penceresine çevirir."""
+    if len(nums) < 2:
+        return config.SHIFT_START_HOUR, config.SHIFT_END_HOUR
+    a, b = nums[0], nums[1]
+    if (a, b) in _SHIFT_ALIASES:
+        return _SHIFT_ALIASES[(a, b)]
+    if 0 <= a < b <= 24:
+        return a, b              # düz 24-saat aralığı
+    if b <= a:                   # "8 4" gibi -> bitişi öğleden sonraya taşı
+        return a, b + 12
+    return a, b
+
+
+def _parse_rapor_args(args: list[str], today: date) -> tuple[date, int, int]:
+    target = today
+    nums: list[int] = []
+    for a in args:
+        al = a.lower()
+        if al in ("bugun", "bugün"):
+            target = today
+        elif al in ("yarin", "yarın"):
+            target = today + timedelta(days=1)
+        elif al in ("dun", "dün"):
+            target = today - timedelta(days=1)
+        elif al in _SHIFT_NAMES:
+            nums = list(_SHIFT_NAMES[al])
+        else:
+            try:
+                target = date.fromisoformat(a)
+                continue
+            except ValueError:
+                pass
+            try:
+                nums.append(int(a))
+            except ValueError:
+                pass
+    start_h, end_h = _resolve_shift(nums)
+    return target, start_h, end_h
+
+
+def _merge_manual(report: dict, target: date, start_h: int, end_h: int):
+    from datetime import time as dtime
+    manual = _manual_to_entries(_load_manual(target), target)
+    if not manual:
+        return
+    midnight = datetime.combine(target, dtime(0, 0))
+    s = midnight + timedelta(hours=start_h)
+    e = midnight + timedelta(hours=end_h)
+    report["at_port"]   += [m for m in manual if m.is_active_during(s, e)]
+    report["departing"] += [m for m in manual if m.departs_during(s, e)]
+    report["arriving"]  += [m for m in manual if m.arrives_during(s, e)]
+
+
+async def cmd_rapor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Belirli gün + vardiya için rapor.
+    Örnekler:
+      /rapor yarin 8 4   -> yarın 08:00–16:00
+      /rapor 4 12        -> bugün 16:00–24:00
+      /rapor 2026-06-10 gece
+    """
+    today = datetime.now(TZ).date()
+    target, start_h, end_h = _parse_rapor_args(ctx.args, today)
+    await update.message.reply_text(
+        f"🔍 {target.isoformat()} {start_h:02d}:00–{end_h:02d}:00 için veri çekiliyor..."
+    )
+    report = get_shift_report(target, start_h, end_h)
+    _merge_manual(report, target, start_h, end_h)
     await update.message.reply_text(
         build_shift_message(report), parse_mode="Markdown"
     )
@@ -362,6 +456,7 @@ def main():
     app.add_handler(CommandHandler("vardiyalar",   cmd_vardiyalar))
     app.add_handler(CommandHandler("vardiya_sil",  cmd_vardiya_sil))
     app.add_handler(CommandHandler("kontrol",      cmd_kontrol))
+    app.add_handler(CommandHandler("rapor",        cmd_rapor))
     app.add_handler(CommandHandler("prefetch",     cmd_prefetch))
     app.add_handler(CommandHandler("gemi_ekle",    cmd_gemi_ekle))
     app.add_handler(CommandHandler("gemiler",      cmd_gemiler))
@@ -393,6 +488,7 @@ def main():
             BotCommand("vardiyalar",   "Yaklaşan vardiyalar"),
             BotCommand("vardiya_sil",  "Vardiya günü sil"),
             BotCommand("kontrol",      "Raporu şimdi göster"),
+            BotCommand("rapor",        "Gün + vardiya sorgula"),
             BotCommand("prefetch",     "Yarınki veriyi çek"),
             BotCommand("gemi_ekle",    "Manuel gemi ekle"),
             BotCommand("gemiler",      "Manuel gemiler"),

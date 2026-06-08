@@ -40,13 +40,15 @@ def _line(e: BerthEntry) -> str:
 def build_shift_message(report: dict) -> str:
     d: date                  = report["date"]
     source: str              = report["source"]
+    start_h: int             = report.get("start_h", 8)
+    end_h: int               = report.get("end_h", 16)
     at_port: list[BerthEntry]  = report.get("at_port",   [])
     departing: list[BerthEntry]= report.get("departing", [])
     arriving: list[BerthEntry] = report.get("arriving",  [])
 
     lines = [
         "🚢 *Asya Port Vardiya Raporu*",
-        f"📅 {format_date_tr(d)} — 08:00–16:00",
+        f"📅 {format_date_tr(d)} — {start_h:02d}:00–{end_h:02d}:00",
         "",
     ]
 

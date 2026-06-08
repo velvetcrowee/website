@@ -437,12 +437,16 @@ def fetch_live(target: date) -> tuple[list[BerthEntry], str]:
 def get_shift_report(target: date, start_h: int = 8, end_h: int = 16) -> dict:
     entries, source = fetch_entries(target)
 
-    shift_start = datetime.combine(target, time(start_h, 0))
-    shift_end   = datetime.combine(target, time(end_h,   0))
+    # combine + timedelta so end_h == 24 (gece vardiyası bitişi) da çalışır
+    midnight    = datetime.combine(target, time(0, 0))
+    shift_start = midnight + timedelta(hours=start_h)
+    shift_end   = midnight + timedelta(hours=end_h)
 
     return {
         "date":      target,
         "source":    source,
+        "start_h":   start_h,
+        "end_h":     end_h,
         "error":     None if entries or source == "no_data" else "fetch_failed",
         "at_port":   [e for e in entries if e.is_active_during(shift_start, shift_end)],
         "departing": [e for e in entries if e.departs_during(shift_start, shift_end)],
