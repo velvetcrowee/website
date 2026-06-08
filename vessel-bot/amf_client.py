@@ -425,8 +425,10 @@ def decode_envelope(data: bytes) -> list:
     return values
 
 
-VESSEL_KEYS = {'vessel', 'berthno', 'berthTime', 'depatureTimeS',
-               'vesselName', 'vslNm', 'shipNm', 'berthside', 'outservice'}
+# Keys that mark a BerthChartDomain row (com.clt.domain.ondock.BerthChartDomain).
+# Field names confirmed from a live selectBerthVessel(fromDate, toDate) dump.
+VESSEL_KEYS = {'vslName', 'vessel', 'berthno', 'berthTime', 'depatureTime',
+               'depatureTimeS', 'atb', 'atd', 'berthside', 'outservice'}
 
 
 def _extract_vessels(obj, out, depth=0):
@@ -504,10 +506,50 @@ HEADERS  = {
 }
 
 
-def get_vessels(year: int, month: int, day: int) -> list:
-    """Call selectBerthVessel(year, month, day); return BerthChartVO dicts."""
-    data = build_request('berthChartDestination', 'selectBerthVessel',
-                         [ENC_INT(year), ENC_INT(month), ENC_INT(day)])
+# ── Legacy AMF0 remoting: selectBerthVessel(fromDate, toDate) ──────────────────
+#
+# The OPUS server resolves berthChartDestination.selectBerthVessel as a 2-arg
+# method (server: "2 were expected") and only answers a classic AMF0 remoting
+# envelope carrying a strict-array of two AMF0 strings — NOT the AMF3
+# RemotingMessage wrapper used by build_request(). Confirmed constraints:
+#   • dates must be formatted "%Y%m%d"
+#   • the range must span more than one day (from == to returns an empty body)
+
+DATE_FMT = '%Y%m%d'
+
+
+def _amf0_string(s: str) -> bytes:
+    """AMF0 string value (type-marked), for use inside the argument array."""
+    b = s.encode('utf-8')
+    return bytes([0x02]) + struct.pack('>H', len(b)) + b
+
+
+def _amf0_strict_array(items) -> bytes:
+    return bytes([0x0A]) + struct.pack('>I', len(items)) + b''.join(items)
+
+
+def build_select_berth_vessel(from_date: str, to_date: str) -> bytes:
+    """Full AMF0 remoting envelope for selectBerthVessel(fromDate, toDate)."""
+    body = _amf0_strict_array([_amf0_string(from_date), _amf0_string(to_date)])
+    buf  = struct.pack('>H', 0)        # AMF version 0
+    buf += struct.pack('>H', 0)        # 0 headers
+    buf += struct.pack('>H', 1)        # 1 body
+    buf += amf0_str('berthChartDestination.selectBerthVessel')  # target URI
+    buf += amf0_str('/1')              # response URI
+    buf += struct.pack('>i', -1)       # body length unknown
+    return buf + body
+
+
+def get_vessels(from_date, to_date) -> list:
+    """Call selectBerthVessel(fromDate, toDate) via legacy AMF0 remoting.
+
+    Accepts date/datetime objects or pre-formatted "%Y%m%d" strings and
+    returns a list of BerthChartDomain dicts. Note the range must span more
+    than one day for the server to return rows.
+    """
+    s1 = from_date.strftime(DATE_FMT) if hasattr(from_date, 'strftime') else str(from_date)
+    s2 = to_date.strftime(DATE_FMT)   if hasattr(to_date, 'strftime')   else str(to_date)
+    data = build_select_berth_vessel(s1, s2)
     try:
         r = requests.post(ENDPOINT, data=data, headers=HEADERS, timeout=15)
         if r.status_code != 200 or len(r.content) < 20:
@@ -550,44 +592,21 @@ def call(operation, params, label=''):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
+    from datetime import timedelta
     today = date.today()
-    y, m, d = today.year, today.month, today.day
-    ds = today.strftime('%Y%m%d')
-    print('=== BlazeDS AMF Client (externalizable) ===')
+    frm   = (today - timedelta(days=2)).strftime(DATE_FMT)
+    to    = (today + timedelta(days=2)).strftime(DATE_FMT)
+    print('=== BlazeDS AMF Client (AMF0 remoting) ===')
     print(f'Endpoint: {ENDPOINT}')
-    print(f'Tarih: {today}\n')
+    print(f'selectBerthVessel("{frm}", "{to}")\n')
 
-    tests = [
-        ('selectBerthVessel', [ENC_INT(y), ENC_INT(m), ENC_INT(d)],
-            'selectBerthVessel(int y,m,d)'),
-        ('selectBerthVessel', [ENC_DBL(y), ENC_DBL(m), ENC_DBL(d)],
-            'selectBerthVessel(num y,m,d)'),
-        ('selectBerthVessel', [ENC_STR(str(y)), ENC_STR(f'{m:02d}'), ENC_STR(f'{d:02d}')],
-            'selectBerthVessel(str y,m,d)'),
-        ('selectBerthVessel', [ENC_STR(ds)],
-            'selectBerthVessel("YYYYMMDD")'),
-        ('selectBerthVessel', [ENC_INT(y), ENC_INT(m), ENC_INT(d), ENC_STR('')],
-            'selectBerthVessel(int y,m,d,"")'),
-        ('selectBerthVessel', [],
-            'selectBerthVessel()'),
-        ('selectBerth', [ENC_INT(y), ENC_INT(m), ENC_INT(d)],
-            'selectBerth(int y,m,d)'),
-        ('selectBerthBitt', [ENC_INT(y), ENC_INT(m), ENC_INT(d)],
-            'selectBerthBitt(int y,m,d)'),
-        ('getBerthDirection', [],
-            'getBerthDirection()'),
-    ]
-
-    found = []
-    for op, params, label in tests:
-        r = call(op, params, label)
-        if r and decode_response(r.content):
-            found.append((label, len(decode_response(r.content))))
-
-    print('\n' + '=' * 50)
-    if found:
-        print(f'✅ {len(found)} operasyonda gemi verisi bulundu!')
-        for label, n in found:
-            print(f'   {label}  → {n} gemi')
+    vessels = get_vessels(frm, to)
+    if vessels:
+        print(f'✅ {len(vessels)} gemi bulundu:')
+        for v in vessels[:6]:
+            print(f"   {v.get('vslName', '?'):<22} "
+                  f"rıhtım={v.get('berthno', '?'):<4} "
+                  f"yanaşma={v.get('atb', '?')}  kalkış={v.get('atd', '?')}  "
+                  f"[{v.get('statusDesc', '')}]")
     else:
-        print('ℹ️  Gemi verisi yok. Yukarıdaki hata mesajlarına bakın.')
+        print('ℹ️  Gemi verisi yok. Liman ağında olduğunuzdan emin olun.')

@@ -107,7 +107,8 @@ def _get(url: str, params: dict = None, timeout: int = 10) -> Optional[requests.
 # ── Tarih-saat parse ──────────────────────────────────────────────────────────
 
 _DT_FORMATS = [
-    "%Y%m%d%H%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+    "%Y%m%d%H%M%S", "%Y%m%d%H%M", "%Y/%m/%d %H:%M",
+    "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
     "%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M", "%m/%d/%Y %H:%M",
     "%Y%m%d %H:%M", "%Y%m%d",
 ]
@@ -360,22 +361,28 @@ def _amf_to_entries(vessels: list[dict], ref: date) -> list[BerthEntry]:
                     return str(val).strip()
             return ''
 
-        ship = g('vessel', 'vesselName', 'vslNm', 'shipNm', 'shipName', 'name')
+        # Field names from com.clt.domain.ondock.BerthChartDomain:
+        #   vslName  -> full vessel name (vessel = 4-letter code only)
+        #   berthno  -> berth id (B3/BLK/FB1); berthNo/berthName are empty
+        #   atb/atd  -> actual berth/departure "%Y-%m-%d %H:%M"
+        #   berthTime/depatureTime -> compact "%Y%m%d%H%M%S" fallback
+        #   vslOperator -> line operator (MSC/SOC); outservice -> service code
+        ship = g('vslName', 'vesselName', 'vessel', 'vslNm', 'shipNm', 'shipName', 'name')
         if not ship:
             continue
 
         arr_dt = _amf_time(
-            v.get('berthTime') or v.get('arrivalTime') or v.get('eta'), ref)
+            g('atb', 'berthTime', 'berthTimeS', 'etb', 'arrivalTime', 'eta'), ref)
         dep_dt = _amf_time(
-            v.get('depatureTimeS') or v.get('departureTime') or v.get('etd'), ref)
+            g('atd', 'depatureTime', 'depatureTimeS', 'etd', 'departureTime'), ref)
 
         entries.append(BerthEntry(
-            berth=g('berthno', 'berthName', 'berth', 'pier'),
+            berth=g('berthno', 'berthNo', 'berthName', 'brthNo', 'berth', 'pier'),
             ship_name=ship,
             arrival=arr_dt.isoformat() if arr_dt else None,
             departure=dep_dt.isoformat() if dep_dt else None,
-            agent=g('agent', 'agentName'),
-            load_info=g('berthside', 'outservice', 'loadInfo'),
+            agent=g('vslOperator', 'agent', 'agentName'),
+            load_info=g('outservice', 'inservice', 'berthside', 'loadInfo'),
         ))
     return entries
 
@@ -397,18 +404,23 @@ def fetch_entries(target: date) -> tuple[list[BerthEntry], str]:
 
 def fetch_live(target: date) -> tuple[list[BerthEntry], str]:
     """Cache'e bakmadan canlıdan çeker, başarılı olursa cache'e kaydeder."""
-    # Primary: BlazeDS AMF3 protocol (Flash arka-uç)
+    # Primary: BlazeDS AMF0 remoting (selectBerthVessel(fromDate, toDate))
     try:
         from amf_client import get_vessels
-        vessels = get_vessels(target.year, target.month, target.day)
+        # The chart is queried as a range; a single-day range returns nothing,
+        # and a window around the target also catches vessels that berthed
+        # earlier but are still in port (or depart) during the target shift.
+        frm = target - timedelta(days=2)
+        to  = target + timedelta(days=2)
+        vessels = get_vessels(frm, to)
         if vessels:
             entries = _amf_to_entries(vessels, target)
             if entries:
                 _save_cache(target, entries)
-                log.info(f"AMF3 verisi alındı: {len(entries)} gemi")
-                return entries, "amf3"
+                log.info(f"AMF verisi alındı: {len(entries)} gemi")
+                return entries, "amf"
     except Exception as e:
-        log.warning(f"AMF3 çekme hatası: {e}")
+        log.warning(f"AMF çekme hatası: {e}")
 
     # Fallback: HTTP endpoint probing
     entries = _probe_candidates(target) or _probe_main_page(target)
