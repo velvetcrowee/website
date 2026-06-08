@@ -1,5 +1,12 @@
 import os
 
+# .env dosyasını otomatik yükle (Windows/Mac/Linux/Termux — run.sh gerekmez)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Telegram bot token - BotFather'dan alın
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
