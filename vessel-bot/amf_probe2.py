@@ -103,9 +103,13 @@ def run():
                 print(f'      {info}')
             hits.append(label)
         elif fault:
-            for k in ('code', 'message', 'details', 'rootCause'):
+            for k in ('code', 'message', 'description', 'details', 'rootCause'):
                 if fault.get(k):
-                    print(f'   {k}: {str(fault[k])[:150]}')
+                    print(f'   {k}: {str(fault[k])[:200]}')
+        else:
+            _, rel = a.parse_amf_strings(r.content)
+            allstr = a.re.findall(r'[\x20-\x7e]{4,}', r.content.decode('latin-1'))
+            print(f'   stringler: {allstr[:8]}')
         print()
 
     print('=' * 55)

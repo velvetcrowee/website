@@ -347,6 +347,58 @@ class _AMF3:
         raise ValueError(f'unknown AMF3 marker 0x{t:02x} at {self.buf.p}')
 
 
+class _AMF0:
+    """AMF0 value decoder; switches to AMF3 on the 0x11 marker."""
+    def __init__(self, buf):
+        self.buf = buf
+        self.refs = []
+
+    def val(self):
+        t = self.buf.u8()
+        if t == 0x00: return self.buf.dbl()                 # number
+        if t == 0x01: return bool(self.buf.u8())            # boolean
+        if t == 0x02:                                        # string
+            return self.buf.read(self.buf.u16()).decode('utf-8', errors='replace')
+        if t == 0x03:                                        # object
+            obj = {}; self.refs.append(obj)
+            return self._body(obj)
+        if t in (0x05, 0x06): return None                    # null / undefined
+        if t == 0x07:                                        # reference
+            idx = self.buf.u16()
+            return self.refs[idx] if idx < len(self.refs) else None
+        if t == 0x08:                                        # ECMA array
+            self.buf.i32()                                   # assoc count (unreliable)
+            obj = {}; self.refs.append(obj)
+            return self._body(obj)
+        if t == 0x0A:                                        # strict array
+            n = struct.unpack('>I', self.buf.read(4))[0]
+            arr = []; self.refs.append(arr)
+            for _ in range(n): arr.append(self.val())
+            return arr
+        if t == 0x0B:                                        # date
+            ms = self.buf.dbl(); self.buf.u16(); return ms
+        if t == 0x0C:                                        # long string
+            n = struct.unpack('>I', self.buf.read(4))[0]
+            return self.buf.read(n).decode('utf-8', errors='replace')
+        if t == 0x10:                                        # typed object
+            cls = self.buf.read(self.buf.u16()).decode('utf-8', errors='replace')
+            obj = {'__cls': cls}; self.refs.append(obj)
+            return self._body(obj)
+        if t == 0x11:                                        # AMF3 switch
+            return _AMF3(self.buf).val()
+        raise ValueError(f'unknown AMF0 marker 0x{t:02x} at {self.buf.p}')
+
+    def _body(self, obj):
+        while True:
+            klen = self.buf.u16()
+            key = self.buf.read(klen).decode('utf-8', errors='replace')
+            if key == '' and self.buf.d[self.buf.p] == 0x09:
+                self.buf.u8()                                # object-end marker
+                break
+            obj[key] = self.val()
+        return obj
+
+
 # ── Envelope / extraction ─────────────────────────────────────────────────────
 
 def decode_envelope(data: bytes) -> list:
@@ -366,12 +418,10 @@ def decode_envelope(data: bytes) -> list:
         target = buf.amf0str()      # e.g. "/1/onResult" or "/1/onStatus"
         buf.amf0str()               # response URI
         buf.i32()                   # body length (-1 = unknown)
-        marker = buf.u8()
-        if marker == 0x11:          # AMF3 body
-            try:
-                values.append((target, _AMF3(buf).val()))
-            except Exception:
-                break
+        try:                        # AMF0 reader handles 0x11 -> AMF3 switch
+            values.append((target, _AMF0(buf).val()))
+        except Exception:
+            break
     return values
 
 
@@ -425,7 +475,8 @@ def find_fault(data: bytes) -> str:
     try:
         for target, value in decode_envelope(data):
             if isinstance(value, dict):
-                for k in ('faultString', 'message', 'faultDetail'):
+                for k in ('faultString', 'message', 'description',
+                          'faultDetail', 'details', 'code'):
                     if value.get(k):
                         return f'{value[k]}'
             if 'onStatus' in (target or ''):
