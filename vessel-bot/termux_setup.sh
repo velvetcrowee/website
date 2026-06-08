@@ -23,7 +23,7 @@ echo "  ✓ Python kuruldu"
 # Python bağımlılıkları
 echo ""
 echo "[2/4] Python kütüphaneleri kuruluyor..."
-pip install -q python-telegram-bot==20.7 requests beautifulsoup4 apscheduler pytz lxml
+pip install -q python-telegram-bot==20.7 requests beautifulsoup4 apscheduler pytz python-dotenv
 echo "  ✓ Kütüphaneler kuruldu"
 
 # .env dosyası
