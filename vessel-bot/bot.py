@@ -41,7 +41,7 @@ from shift_manager import (
 )
 from formatter import (
     build_shift_message, build_shifts_list, build_ship_detail,
-    build_ship_list, build_berth_view, build_diff_message,
+    build_ship_list, build_berth_view, build_diff_message, build_day_overview,
 )
 
 logging.basicConfig(
@@ -125,6 +125,8 @@ async def cmd_yardim(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "  örn: /rapor 4 12 _(bugün 16:00–24:00)_\n"
         "  örn: /rapor 2026-06-10 gece\n"
         "  vardiyalar: 8-4, 4-12, 12-8 ya da düz saat (16 24)\n"
+        "/liste 2 — N gün boyu gün-boyu tüm gemiler\n"
+        "  örn: /liste 2 _(bugün+yarın)_, /liste yarin 3\n"
         "/gemi MSC ALIX — tek gemi detayı\n"
         "/rihtim B3 — o rıhtımdaki gemiler\n"
         "/simdi — şu an limanda olanlar\n"
@@ -290,6 +292,38 @@ async def cmd_rapor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         build_shift_message(report), parse_mode="Markdown"
     )
+
+
+async def cmd_liste(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/liste [gun] [N] → N gün boyunca (gün-boyu) tüm gemiler. Örn: /liste 2"""
+    today = datetime.now(TZ).date()
+    start = today
+    ndays = 1
+    for a in ctx.args:
+        al = a.lower()
+        if al in ("bugun", "bugün"):
+            start = today
+        elif al in ("yarin", "yarın"):
+            start = today + timedelta(days=1)
+        elif al in ("dun", "dün"):
+            start = today - timedelta(days=1)
+        else:
+            try:
+                start = date.fromisoformat(a)
+                continue
+            except ValueError:
+                pass
+            try:
+                ndays = max(1, min(7, int(a)))
+            except ValueError:
+                pass
+    await update.message.reply_text(
+        f"🔍 {ndays} günlük gemi listesi çekiliyor...")
+    for i in range(ndays):
+        d = start + timedelta(days=i)
+        entries, _ = fetch_entries(d)
+        await update.message.reply_text(
+            build_day_overview(d, entries), parse_mode="Markdown")
 
 
 async def cmd_gemi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -551,6 +585,7 @@ def main():
     app.add_handler(CommandHandler("vardiya_sil",  cmd_vardiya_sil))
     app.add_handler(CommandHandler("kontrol",      cmd_kontrol))
     app.add_handler(CommandHandler("rapor",        cmd_rapor))
+    app.add_handler(CommandHandler("liste",        cmd_liste))
     app.add_handler(CommandHandler("gemi",         cmd_gemi))
     app.add_handler(CommandHandler("rihtim",       cmd_rihtim))
     app.add_handler(CommandHandler("simdi",        cmd_simdi))
@@ -587,6 +622,7 @@ def main():
             BotCommand("vardiya_sil",  "Vardiya günü sil"),
             BotCommand("kontrol",      "Raporu şimdi göster"),
             BotCommand("rapor",        "Gün + vardiya sorgula"),
+            BotCommand("liste",        "N gün boyu tüm gemiler"),
             BotCommand("gemi",         "Tek gemi detayı"),
             BotCommand("rihtim",       "Rıhtımdaki gemiler"),
             BotCommand("simdi",        "Şu an limanda"),

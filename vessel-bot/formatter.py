@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from scraper import BerthEntry
 from shift_manager import format_date_tr
 
@@ -197,6 +197,32 @@ def build_diff_message(d: date, diff: dict) -> str:
         lines += [f"• *{e.ship_name}* ({e.berth})" for e in removed]
         lines.append("")
     return "\n".join(lines).rstrip()
+
+
+def build_day_overview(d: date, entries: list[BerthEntry]) -> str:
+    """Bir günün tüm gün-boyu gemileri (vardiya filtresi yok), yanaşma sırasına göre."""
+    start = datetime.combine(d, datetime.min.time())
+    end = start + timedelta(days=1)
+    seen = {}
+    for e in entries:
+        if e.is_active_during(start, end):
+            seen.setdefault(e.ship_name, e)
+    day = sorted(seen.values(), key=lambda e: e.arrival or "")
+    head = f"📅 *{format_date_tr(d)} — gün boyu* ({len(day)} gemi)"
+    if not day:
+        return head + "\n_(gemi yok)_"
+    lines = [head]
+    summary = _summary(day, [], [])
+    if summary:
+        lines.append(summary)
+    lines.append("")
+    for e in day:
+        cargo = _cargo(e)
+        line = f"• *{e.ship_name}* ({e.berth}) {_t(e.arrival)} → {_t(e.departure)}"
+        if cargo:
+            line += f"  {cargo}"
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def build_shifts_list(shifts: list[date]) -> str:
