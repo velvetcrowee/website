@@ -20,19 +20,16 @@ def _date_short(d: date) -> str:
 
 
 def _hm(dt_iso: str | None, ref: date | None) -> str:
-    """'SS:DD'; tarih ref'ten farklıysa '+1g'/'-1g' ön eki ile."""
+    """Aynı günse 'SS:DD'; farklı günse 'GG/AA SS:DD'."""
     if not dt_iso:
         return "?"
     try:
         dt = datetime.fromisoformat(dt_iso)
     except Exception:
         return dt_iso
-    s = dt.strftime("%H:%M")
-    if ref is not None:
-        delta = (dt.date() - ref).days
-        if delta:
-            s = f"{'+' if delta > 0 else ''}{delta}g {s}"
-    return s
+    if ref is not None and dt.date() != ref:
+        return dt.strftime("%d/%m %H:%M")
+    return dt.strftime("%H:%M")
 
 
 def _status_emoji(e: BerthEntry) -> str:

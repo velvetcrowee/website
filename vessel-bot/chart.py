@@ -44,33 +44,57 @@ def build_gantt(entries, start: date, days: int = 3) -> bytes | None:
         return None
 
     berths = sorted(rows.keys())
-    fig, ax = plt.subplots(figsize=(13, 1.05 * len(berths) + 2.0))
-    BAR_H = 0.74
+    fig, ax = plt.subplots(figsize=(13, 1.3 * len(berths) + 2.0))
+    BAND = 0.86          # bir rıhtım satırının dikey bandı
 
     for i, b in enumerate(berths):
-        for ca, cd, a, d, e in rows[b]:
+        vessels = sorted(rows[b], key=lambda r: r[0])   # clipped arrival'a göre
+
+        # Zamanda çakışan gemileri şeritlere dağıt (aynı rıhtımda 2+ gemi)
+        lane_end: list = []        # her şeridin son bitişi
+        assign: list[int] = []
+        for ca, cd, *_ in vessels:
+            placed = False
+            for li in range(len(lane_end)):
+                if ca >= lane_end[li]:
+                    lane_end[li] = cd
+                    assign.append(li)
+                    placed = True
+                    break
+            if not placed:
+                lane_end.append(cd)
+                assign.append(len(lane_end) - 1)
+        nlanes = max(1, len(lane_end))
+        lane_h = BAND / nlanes
+
+        for (ca, cd, a, d, e), k in zip(vessels, assign):
+            y = i - BAND / 2 + lane_h * (k + 0.5)
             left = mdates.date2num(ca)
             width = mdates.date2num(cd) - left
             mid = left + width / 2
-            ax.barh(i, width, left=left, height=BAR_H,
+            ax.barh(y, width, left=left, height=lane_h * 0.9,
                     color=_COLOR.get((e.status or "").upper(), _DEFAULT_COLOR),
                     edgecolor="white", linewidth=1.0)
 
-            # köşelerde yanaşma / kalkış saati (pencere içinde kalan uçlar)
+            top = y - lane_h * 0.45
             if a >= win_start:
-                ax.text(left + 0.004, i - BAR_H / 2 + 0.04, a.strftime("%H:%M"),
-                        ha="left", va="top", fontsize=5.5, color="white", clip_on=True)
+                ax.text(left + 0.004, top, a.strftime("%H:%M"),
+                        ha="left", va="top", fontsize=5, color="white", clip_on=True)
             if d <= win_end:
-                ax.text(left + width - 0.004, i - BAR_H / 2 + 0.04, d.strftime("%H:%M"),
-                        ha="right", va="top", fontsize=5.5, color="white", clip_on=True)
+                ax.text(left + width - 0.004, top, d.strftime("%H:%M"),
+                        ha="right", va="top", fontsize=5, color="white", clip_on=True)
 
-            # orta etiket: GEMİ ADI-sefer / yük/tahliye/shift / servis
             voy = (e.voyage or "").split("/")[0]
             title = f"{e.ship_name}" + (f"-{voy}" if voy else "")
             cargo = f"{e.load_van or '0'}/{e.dis_van or '0'}/{e.shift_van or '0'}"
-            label = title + "\n" + cargo + (f"  {e.service}" if e.service else "")
-            ax.text(mid, i + 0.05, label, ha="center", va="center",
-                    fontsize=6, color="white", linespacing=1.1, clip_on=True)
+            if nlanes > 1:                       # dar kutu: ad + yük/tahliye
+                label = f"{title}\n{cargo}"
+                fs = 5
+            else:
+                label = title + "\n" + cargo + (f"  {e.service}" if e.service else "")
+                fs = 6
+            ax.text(mid, y, label, ha="center", va="center",
+                    fontsize=fs, color="white", linespacing=1.05, clip_on=True)
 
     ax.set_yticks(range(len(berths)))
     ax.set_yticklabels(berths, fontweight="bold")
