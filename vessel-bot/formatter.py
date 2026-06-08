@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta
 from scraper import BerthEntry
-from shift_manager import format_date_tr
+from shift_manager import format_date_tr, get_shift_hours
 
 
 def _t(dt_iso: str | None) -> str:
@@ -247,5 +247,7 @@ def build_shifts_list(shifts: list[date]) -> str:
         return "📋 Kayıtlı vardiya yok.\n/vardiya\\_ekle YYYY-MM-DD ile ekleyin."
     lines = ["📋 *Yaklaşan vardiyalar:*", ""]
     for d in shifts:
-        lines.append(f"• {format_date_tr(d)}")
+        h = get_shift_hours(d)
+        suffix = f" · {h[0]:02d}:00–{h[1]:02d}:00" if h else ""
+        lines.append(f"• {format_date_tr(d)}{suffix}")
     return "\n".join(lines)

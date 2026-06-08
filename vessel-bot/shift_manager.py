@@ -4,38 +4,44 @@ from datetime import date, datetime, timedelta
 from config import SHIFTS_FILE
 
 
-def _load():
+DEFAULT_SHIFT = (8, 16)
+
+
+def _load_map() -> dict:
+    """date_str -> (start_h, end_h). Eski liste formatıyla geriye uyumlu."""
     if not os.path.exists(SHIFTS_FILE):
-        return []
+        return {}
     with open(SHIFTS_FILE, "r") as f:
-        return json.load(f)
+        raw = json.load(f)
+    if isinstance(raw, dict):
+        return {k: tuple(v) for k, v in raw.items()}
+    # eski format: sadece tarih listesi -> varsayılan vardiya
+    return {s: DEFAULT_SHIFT for s in raw}
 
 
-def _save(shifts):
+def _save_map(m: dict):
     with open(SHIFTS_FILE, "w") as f:
-        json.dump(shifts, f, indent=2)
+        json.dump({k: list(v) for k, v in sorted(m.items())}, f, indent=2)
 
 
-def add_shift(shift_date: date) -> bool:
-    """Vardiya ekle. True: yeni eklendi, False: zaten vardı."""
-    shifts = _load()
+def add_shift(shift_date: date, start_h: int = 8, end_h: int = 16) -> bool:
+    """Vardiya ekle/güncelle. True: yeni eklendi, False: zaten vardı (saat güncellendi)."""
+    m = _load_map()
     date_str = shift_date.isoformat()
-    if date_str in shifts:
-        return False
-    shifts.append(date_str)
-    shifts.sort()
-    _save(shifts)
-    return True
+    is_new = date_str not in m
+    m[date_str] = (start_h, end_h)
+    _save_map(m)
+    return is_new
 
 
 def remove_shift(shift_date: date) -> bool:
     """Vardiyayı sil. True: silindi, False: bulunamadı."""
-    shifts = _load()
+    m = _load_map()
     date_str = shift_date.isoformat()
-    if date_str not in shifts:
+    if date_str not in m:
         return False
-    shifts.remove(date_str)
-    _save(shifts)
+    del m[date_str]
+    _save_map(m)
     return True
 
 
@@ -43,27 +49,25 @@ def is_shift_day(check_date: date = None) -> bool:
     """Belirtilen gün (varsayılan: bugün) vardiya günü mü?"""
     if check_date is None:
         check_date = date.today()
-    shifts = _load()
-    return check_date.isoformat() in shifts
+    return check_date.isoformat() in _load_map()
+
+
+def get_shift_hours(check_date: date) -> tuple | None:
+    """O günün vardiya saatleri (start_h, end_h) ya da None."""
+    return _load_map().get(check_date.isoformat())
 
 
 def get_upcoming_shifts(days: int = 30) -> list[date]:
     """Önümüzdeki N gün içindeki vardiyaları döner."""
-    shifts = _load()
     today = date.today()
     limit = today + timedelta(days=days)
-    result = []
-    for s in shifts:
-        d = date.fromisoformat(s)
-        if today <= d <= limit:
-            result.append(d)
-    return sorted(result)
+    result = [date.fromisoformat(s) for s in _load_map()]
+    return sorted(d for d in result if today <= d <= limit)
 
 
 def get_all_shifts() -> list[date]:
     """Tüm vardiya günlerini döner."""
-    shifts = _load()
-    return [date.fromisoformat(s) for s in sorted(shifts)]
+    return [date.fromisoformat(s) for s in sorted(_load_map())]
 
 
 TURKISH_DAYS = {

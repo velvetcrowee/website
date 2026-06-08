@@ -42,6 +42,7 @@ class BerthEntry:
     load_info:  str = ""
     load_van:   str = ""   # yüklenecek konteyner (loadvan)
     dis_van:    str = ""   # tahliye edilecek konteyner (disvan)
+    shift_van:  str = ""   # gemi-içi shift konteyner (shiftvan)
     status:     str = ""   # ARRIVED / PLANNED / DEPATURED (statusDesc)
     service:    str = ""   # servis hattı (outservice/inservice)
     length:     str = ""   # gemi boyu (vslLength)
@@ -395,6 +396,7 @@ def _amf_to_entries(vessels: list[dict], ref: date) -> list[BerthEntry]:
             load_info=g('outservice', 'inservice', 'berthside', 'loadInfo'),
             load_van=g('loadvan', 'loadVan'),
             dis_van=g('disvan', 'disVan'),
+            shift_van=g('shiftvan', 'shiftVan'),
             status=g('statusDesc', 'status'),
             service=g('outservice', 'inservice'),
             length=g('vslLength'),

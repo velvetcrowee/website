@@ -37,7 +37,8 @@ from scraper import (
     prefetch_tomorrow, BerthEntry, _save_cache,
 )
 from shift_manager import (
-    add_shift, remove_shift, is_shift_day, get_upcoming_shifts, format_date_tr,
+    add_shift, remove_shift, is_shift_day, get_upcoming_shifts,
+    get_shift_hours, format_date_tr,
 )
 from formatter import (
     build_shift_message, build_shifts_list, build_ship_detail,
@@ -120,8 +121,9 @@ async def cmd_yardim(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     text = (
         "📋 *Komutlar:*\n\n"
         "*Vardiya takvimi:*\n"
-        "/vardiya\\_ekle 2026-06-08 — gün ekle\n"
-        "/vardiyalar — yaklaşan vardiyalar\n"
+        "/vardiya\\_ekle 2026-06-08 4-12 — gün + vardiya ekle\n"
+        "  vardiya: 8-4 / 4-12 / 12-8 _(boş bırakırsan 8-4)_\n"
+        "/vardiyalar — yaklaşan vardiyalar (saatleriyle)\n"
         "/vardiya\\_sil 2026-06-08 — gün sil\n\n"
         "*Raporlar:*\n"
         "/kontrol — bugünkü raporu canlı çek\n"
@@ -152,23 +154,52 @@ async def cmd_yardim(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_vardiya_ekle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not ctx.args:
         await update.message.reply_text(
-            "Kullanım: /vardiya\\_ekle YYYY-MM-DD\n"
-            "Örnek: /vardiya\\_ekle 2026-06-08 2026-06-10",
+            "Kullanım: /vardiya\\_ekle YYYY-MM-DD [vardiya]\n\n"
+            "Vardiya (opsiyonel, varsayılan 8-4):\n"
+            "• 8-4 _(08:00–16:00, gündüz)_\n"
+            "• 4-12 _(16:00–24:00, akşam)_\n"
+            "• 12-8 _(00:00–08:00, gece)_\n\n"
+            "Örnekler:\n"
+            "/vardiya\\_ekle 2026-06-08 4-12\n"
+            "/vardiya\\_ekle 2026-06-08 2026-06-10 gece",
             parse_mode="Markdown",
         )
         return
-    added, skipped, errors = [], [], []
+
+    dates, nums, errors = [], [], []
     for arg in ctx.args:
+        a = arg.strip()
+        al = a.lower()
         try:
-            d = date.fromisoformat(arg.strip())
-            (added if add_shift(d) else skipped).append(format_date_tr(d))
+            dates.append(date.fromisoformat(a))
+            continue
         except ValueError:
-            errors.append(arg)
+            pass
+        if al in _SHIFT_NAMES:
+            nums = list(_SHIFT_NAMES[al])
+        elif "-" in a and all(p.isdigit() for p in a.split("-")) and a.count("-") == 1:
+            p = a.split("-")
+            nums = [int(p[0]), int(p[1])]
+        elif a.isdigit():
+            nums.append(int(a))
+        else:
+            errors.append(a)
+
+    start_h, end_h = _resolve_shift(nums)
+    label = f"{start_h:02d}:00–{end_h:02d}:00"
+
+    added, skipped = [], []
+    for d in dates:
+        is_new = add_shift(d, start_h, end_h)
+        (added if is_new else skipped).append(format_date_tr(d))
+
     parts = []
-    if added:   parts.append("✅ Eklendi:\n" + "\n".join(f"  • {x}" for x in added))
-    if skipped: parts.append("ℹ️ Zaten vardı:\n" + "\n".join(f"  • {x}" for x in skipped))
-    if errors:  parts.append(f"❌ Geçersiz format: {', '.join(errors)}")
-    await update.message.reply_text("\n\n".join(parts) or "Tamam.")
+    if added:   parts.append(f"✅ Eklendi ({label}):\n" + "\n".join(f"  • {x}" for x in added))
+    if skipped: parts.append(f"ℹ️ Güncellendi ({label}):\n" + "\n".join(f"  • {x}" for x in skipped))
+    if errors:  parts.append(f"❌ Anlaşılmadı: {', '.join(errors)}")
+    if not dates:
+        parts.append("❌ Tarih belirtmedin. Örn: /vardiya\\_ekle 2026-06-08 4-12")
+    await update.message.reply_text("\n\n".join(parts) or "Tamam.", parse_mode="Markdown")
 
 
 async def cmd_vardiyalar(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -413,6 +444,11 @@ async def cmd_degisiklik(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 from io import BytesIO
 
 
+def _hours_for(d: date) -> tuple[int, int]:
+    """O gün için kayıtlı vardiya saati, yoksa config varsayılanı."""
+    return get_shift_hours(d) or (config.SHIFT_START_HOUR, config.SHIFT_END_HOUR)
+
+
 def _report_text(target: date, start_h: int, end_h: int) -> str:
     report = get_shift_report(target, start_h, end_h)
     _merge_manual(report, target, start_h, end_h)
@@ -488,12 +524,12 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                       reply_markup=_menu_kb(), parse_mode="Markdown")
         elif data == "today":
             await q.edit_message_text(
-                _report_text(today, config.SHIFT_START_HOUR, config.SHIFT_END_HOUR),
+                _report_text(today, *_hours_for(today)),
                 reply_markup=_back_kb(), parse_mode="Markdown")
         elif data == "tomorrow":
             t = today + timedelta(days=1)
             await q.edit_message_text(
-                _report_text(t, config.SHIFT_START_HOUR, config.SHIFT_END_HOUR),
+                _report_text(t, *_hours_for(t)),
                 reply_markup=_back_kb(), parse_mode="Markdown")
         elif data == "now":
             await q.edit_message_text(_now_text(), reply_markup=_back_kb(), parse_mode="Markdown")
@@ -655,20 +691,10 @@ async def job_morning_report(app: Application):
         log.error("TELEGRAM_CHAT_ID ayarlanmamış!")
         return
 
-    report = get_shift_report(today, config.SHIFT_START_HOUR, config.SHIFT_END_HOUR)
-
-    # Manuel gemileri birleştir
-    from datetime import time as dtime
-    manual = _manual_to_entries(_load_manual(today), today)
-    s = datetime.combine(today, dtime(config.SHIFT_START_HOUR))
-    e = datetime.combine(today, dtime(config.SHIFT_END_HOUR))
-    report["at_port"]   += [m for m in manual if m.is_active_during(s, e)]
-    report["departing"] += [m for m in manual if m.departs_during(s, e)]
-    report["arriving"]  += [m for m in manual if m.arrives_during(s, e)]
-
-    text = build_shift_message(report)
+    start_h, end_h = _hours_for(today)
+    text = _report_text(today, start_h, end_h)
     await app.bot.send_message(chat_id=config.CHAT_ID, text=text, parse_mode="Markdown")
-    log.info("Sabah raporu gönderildi.")
+    log.info(f"Sabah raporu gönderildi ({start_h:02d}:00–{end_h:02d}:00).")
 
 
 async def job_prefetch(app: Application):
