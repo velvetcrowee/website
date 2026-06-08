@@ -25,8 +25,8 @@ import os
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from telegram import Update, BotCommand
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from telegram.constants import ParseMode
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -43,6 +43,10 @@ from formatter import (
     build_shift_message, build_shifts_list, build_ship_detail,
     build_ship_list, build_berth_view, build_diff_message, build_day_overview,
 )
+try:
+    from chart import build_gantt          # matplotlib gerektirir; yoksa çizelge kapalı
+except Exception:
+    build_gantt = None
 
 logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
@@ -106,8 +110,9 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"🚢 *Asya Port Vardiya Botu*\n\n"
         f"Chat ID'niz: `{cid}`\n\n"
         f"Bu ID'yi `.env` dosyasına `TELEGRAM_CHAT_ID={cid}` olarak ekleyin.\n\n"
-        f"Komutlar için /yardim yazın.",
+        f"Aşağıdaki menüden ya da /yardim ile komutlardan kullanabilirsin.",
         parse_mode="Markdown",
+        reply_markup=_menu_kb(),
     )
 
 
@@ -131,6 +136,8 @@ async def cmd_yardim(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/rihtim B3 — o rıhtımdaki gemiler\n"
         "/simdi — şu an limanda olanlar\n"
         "/degisiklik — kayıtlı veriye göre değişenler\n"
+        "/cizelge — rıhtım doluluk çizelgesi (görsel)\n"
+        "/menu — butonlu menü _(yazmadan kullan)_\n"
         "/prefetch — yarınki veriyi şimdi çek\n\n"
         "*Manuel gemi girişi _(scraping çalışmıyorsa):_*\n"
         "/gemi\\_ekle MSC BELLA BERTH2 06:00 20:00 NAF\n"
@@ -401,6 +408,137 @@ async def cmd_degisiklik(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         build_diff_message(target, diff), parse_mode="Markdown")
 
 
+# ── Dokunmatik menü + çizelge ─────────────────────────────────────────────────
+
+from io import BytesIO
+
+
+def _report_text(target: date, start_h: int, end_h: int) -> str:
+    report = get_shift_report(target, start_h, end_h)
+    _merge_manual(report, target, start_h, end_h)
+    return build_shift_message(report)
+
+
+def _now_text() -> str:
+    now = datetime.now(TZ)
+    today = now.date()
+    entries, _ = fetch_entries(today)
+    nn = now.replace(tzinfo=None)
+    at = sorted((e for e in entries if e.is_active_at(nn)), key=lambda e: e.departure or "")
+    return build_ship_list(f"🕘 *Şu an limanda* ({now.strftime('%H:%M')})", today, at)
+
+
+def _menu_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Bugün",    callback_data="today"),
+         InlineKeyboardButton("📅 Yarın",    callback_data="tomorrow")],
+        [InlineKeyboardButton("🕘 Şimdi",    callback_data="now"),
+         InlineKeyboardButton("📆 2 Gün",    callback_data="two")],
+        [InlineKeyboardButton("⚓ Rıhtımlar", callback_data="berths"),
+         InlineKeyboardButton("📊 Çizelge",  callback_data="chart")],
+        [InlineKeyboardButton("🔄 Değişiklik", callback_data="diff")],
+    ])
+
+
+def _back_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Menü", callback_data="menu")]])
+
+
+def _berth_kb(berths: list[str]) -> InlineKeyboardMarkup:
+    btns = [InlineKeyboardButton(b, callback_data=f"berth:{b}") for b in berths]
+    rows = [btns[i:i + 3] for i in range(0, len(btns), 3)]
+    rows.append([InlineKeyboardButton("⬅️ Menü", callback_data="menu")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📋 *Menü* — bir seçenek seç:", reply_markup=_menu_kb(), parse_mode="Markdown")
+
+
+async def cmd_cizelge(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/cizelge [gün] → rıhtım doluluk Gantt görseli."""
+    if build_gantt is None:
+        await update.message.reply_text("Çizelge için matplotlib kurulu değil (pip install matplotlib).")
+        return
+    today = datetime.now(TZ).date()
+    days = 3
+    if ctx.args:
+        try:
+            days = max(1, min(7, int(ctx.args[0])))
+        except ValueError:
+            pass
+    entries, _ = fetch_entries(today)
+    png = build_gantt(entries, today, days=days)
+    if png:
+        await update.message.reply_photo(photo=BytesIO(png),
+                                          caption=f"⚓ Rıhtım çizelgesi ({days} gün)")
+    else:
+        await update.message.reply_text("Çizelge için veri bulunamadı.")
+
+
+async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    data = q.data
+    today = datetime.now(TZ).date()
+    try:
+        if data == "menu":
+            await q.edit_message_text("📋 *Menü* — bir seçenek seç:",
+                                      reply_markup=_menu_kb(), parse_mode="Markdown")
+        elif data == "today":
+            await q.edit_message_text(
+                _report_text(today, config.SHIFT_START_HOUR, config.SHIFT_END_HOUR),
+                reply_markup=_back_kb(), parse_mode="Markdown")
+        elif data == "tomorrow":
+            t = today + timedelta(days=1)
+            await q.edit_message_text(
+                _report_text(t, config.SHIFT_START_HOUR, config.SHIFT_END_HOUR),
+                reply_markup=_back_kb(), parse_mode="Markdown")
+        elif data == "now":
+            await q.edit_message_text(_now_text(), reply_markup=_back_kb(), parse_mode="Markdown")
+        elif data == "two":
+            for i in range(2):
+                d = today + timedelta(days=i)
+                ents, _ = fetch_entries(d)
+                await q.message.reply_text(build_day_overview(d, ents), parse_mode="Markdown")
+        elif data == "berths":
+            ents, _ = fetch_entries(today)
+            berths = sorted({e.berth for e in ents if e.berth})
+            if berths:
+                await q.edit_message_text("⚓ *Rıhtım seç:*",
+                                          reply_markup=_berth_kb(berths), parse_mode="Markdown")
+            else:
+                await q.edit_message_text("Bugün rıhtım verisi yok.", reply_markup=_back_kb())
+        elif data.startswith("berth:"):
+            b = data.split(":", 1)[1]
+            ents, _ = fetch_entries(today)
+            await q.edit_message_text(build_berth_view(today, b, ents),
+                                      reply_markup=_back_kb(), parse_mode="Markdown")
+        elif data == "chart":
+            if build_gantt is None:
+                await q.message.reply_text("Çizelge için matplotlib kurulu değil.")
+            else:
+                ents, _ = fetch_entries(today)
+                png = build_gantt(ents, today, days=3)
+                if png:
+                    await q.message.reply_photo(photo=BytesIO(png),
+                                                caption="⚓ Rıhtım çizelgesi (3 gün)")
+                else:
+                    await q.message.reply_text("Çizelge için veri yok.")
+        elif data == "diff":
+            diff, source = fetch_live_diff(today)
+            if source == "no_data":
+                txt = "❌ Canlı veri çekilemedi."
+            elif not diff:
+                txt = "ℹ️ Karşılaştıracak önceki kayıt yok (ilk çekiş)."
+            else:
+                txt = build_diff_message(today, diff)
+            await q.edit_message_text(txt, reply_markup=_back_kb(), parse_mode="Markdown")
+    except Exception as e:
+        log.warning(f"callback hatası ({data}): {e}")
+
+
 async def cmd_prefetch(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     today = datetime.now(TZ).date()
     await update.message.reply_text(
@@ -590,7 +728,10 @@ def main():
     app.add_handler(CommandHandler("rihtim",       cmd_rihtim))
     app.add_handler(CommandHandler("simdi",        cmd_simdi))
     app.add_handler(CommandHandler("degisiklik",   cmd_degisiklik))
+    app.add_handler(CommandHandler("menu",         cmd_menu))
+    app.add_handler(CommandHandler("cizelge",      cmd_cizelge))
     app.add_handler(CommandHandler("prefetch",     cmd_prefetch))
+    app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(CommandHandler("gemi_ekle",    cmd_gemi_ekle))
     app.add_handler(CommandHandler("gemiler",      cmd_gemiler))
     app.add_handler(CommandHandler("gemi_sil",     cmd_gemi_sil))
@@ -627,6 +768,8 @@ def main():
             BotCommand("rihtim",       "Rıhtımdaki gemiler"),
             BotCommand("simdi",        "Şu an limanda"),
             BotCommand("degisiklik",   "Değişiklikleri göster"),
+            BotCommand("menu",         "Dokunmatik menü"),
+            BotCommand("cizelge",      "Rıhtım çizelgesi (görsel)"),
             BotCommand("prefetch",     "Yarınki veriyi çek"),
             BotCommand("gemi_ekle",    "Manuel gemi ekle"),
             BotCommand("gemiler",      "Manuel gemiler"),
