@@ -42,6 +42,10 @@ class BerthEntry:
     load_info:  str = ""
     load_van:   str = ""   # yüklenecek konteyner (loadvan)
     dis_van:    str = ""   # tahliye edilecek konteyner (disvan)
+    status:     str = ""   # ARRIVED / PLANNED / DEPATURED (statusDesc)
+    service:    str = ""   # servis hattı (outservice/inservice)
+    length:     str = ""   # gemi boyu (vslLength)
+    voyage:     str = ""   # sefer no (voyage)
 
     def arrival_dt(self) -> Optional[datetime]:
         return datetime.fromisoformat(self.arrival) if self.arrival else None
@@ -54,6 +58,10 @@ class BerthEntry:
         if not a or not d:
             return False
         return a < end and d > start
+
+    def is_active_at(self, when: datetime) -> bool:
+        a, d = self.arrival_dt(), self.departure_dt()
+        return bool(a and d and a <= when < d)
 
     def departs_during(self, start: datetime, end: datetime) -> bool:
         d = self.departure_dt()
@@ -387,6 +395,10 @@ def _amf_to_entries(vessels: list[dict], ref: date) -> list[BerthEntry]:
             load_info=g('outservice', 'inservice', 'berthside', 'loadInfo'),
             load_van=g('loadvan', 'loadVan'),
             dis_van=g('disvan', 'disVan'),
+            status=g('statusDesc', 'status'),
+            service=g('outservice', 'inservice'),
+            length=g('vslLength'),
+            voyage=g('voyage', 'evoyage'),
         ))
     return entries
 
@@ -452,6 +464,38 @@ def get_shift_report(target: date, start_h: int = 8, end_h: int = 16) -> dict:
         "departing": [e for e in entries if e.departs_during(shift_start, shift_end)],
         "arriving":  [e for e in entries if e.arrives_during(shift_start, shift_end)],
     }
+
+
+def diff_entries(old: list[BerthEntry], new: list[BerthEntry]) -> dict:
+    """İki gemi listesini karşılaştır. Gemi adına göre eşler.
+
+    Returns {"added": [...], "removed": [...], "changed": [(entry, old_dep, old_arr), ...]}
+    changed = yanaşma ya da kalkış saati değişen gemiler (yeni entry + eski değerler).
+    """
+    old_by = {e.ship_name: e for e in old}
+    new_by = {e.ship_name: e for e in new}
+    added   = [e for n, e in new_by.items() if n not in old_by]
+    removed = [e for n, e in old_by.items() if n not in new_by]
+    changed = []
+    for n, ne in new_by.items():
+        oe = old_by.get(n)
+        if not oe:
+            continue
+        if ne.arrival != oe.arrival or ne.departure != oe.departure:
+            changed.append((ne, oe.arrival, oe.departure))
+    return {"added": added, "removed": removed, "changed": changed}
+
+
+def fetch_live_diff(target: date) -> tuple[dict, str]:
+    """Eski cache'i sakla, canlıyı çek (cache'i tazeler), farkı döndür.
+
+    Returns (diff_dict_or_empty, source). İlk çekişte (eski cache yoksa) diff boş.
+    """
+    old = _load_cache(target)
+    new, source = fetch_live(target)
+    if old is None or not new:
+        return {}, source
+    return diff_entries(old, new), source
 
 
 def prefetch_tomorrow(target: date = None) -> tuple[int, str]:

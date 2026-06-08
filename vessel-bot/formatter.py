@@ -23,6 +23,35 @@ def _cargo(e: BerthEntry) -> str:
     return "📦 " + " / ".join(bits) if bits else ""
 
 
+def _int(s) -> int:
+    try:
+        return int(str(s).strip())
+    except (ValueError, AttributeError):
+        return 0
+
+
+def _summary(*groups: list[BerthEntry]) -> str:
+    """Vardiya özeti: benzersiz gemi sayısı, toplam yük/tahliye, en yoğun rıhtım."""
+    from collections import Counter
+    seen = {}
+    for g in groups:
+        for e in g:
+            seen[e.ship_name] = e
+    ships = list(seen.values())
+    if not ships:
+        return ""
+    load = sum(_int(e.load_van) for e in ships)
+    dis  = sum(_int(e.dis_van) for e in ships)
+    berths = Counter(e.berth for e in ships if e.berth)
+    parts = [f"📊 {len(ships)} gemi"]
+    if load or dis:
+        parts.append(f"📦 {load} yük / {dis} tahliye")
+    if berths:
+        busiest, n = berths.most_common(1)[0]
+        parts.append(f"🏗 en yoğun: {busiest} ({n})")
+    return " · ".join(parts)
+
+
 def _line(e: BerthEntry) -> str:
     parts = [f"• *{e.ship_name}*"]
     if e.berth:
@@ -70,6 +99,10 @@ def build_shift_message(report: dict) -> str:
         lines.append("✅ Bu vardiyada limanda gemi yok.")
         return "\n".join(lines)
 
+    summary = _summary(at_port, departing, arriving)
+    if summary:
+        lines += [summary, ""]
+
     if at_port:
         lines.append(f"⚓ *Limanda olacak ({len(at_port)} gemi):*")
         lines += [_line(e) for e in at_port]
@@ -95,6 +128,75 @@ def build_shift_message(report: dict) -> str:
             lines.append(" ".join(parts))
 
     return "\n".join(lines)
+
+
+def build_ship_detail(e: BerthEntry) -> str:
+    """Tek gemi için tüm detay (/gemi)."""
+    lines = [f"🚢 *{e.ship_name}*"]
+    if e.berth:   lines.append(f"⚓ Rıhtım: {e.berth}")
+    if e.status:  lines.append(f"📍 Durum: {e.status}")
+    lines.append(f"🟢 Yanaşma: {_t(e.arrival)}")
+    lines.append(f"🔴 Kalkış: {_t(e.departure)}")
+    cargo = _cargo(e)
+    if cargo:     lines.append(cargo)
+    if e.service: lines.append(f"🛳 Servis: {e.service}")
+    if e.agent:   lines.append(f"🏢 Operatör: {e.agent}")
+    if e.length:  lines.append(f"📏 Boy: {e.length} m")
+    if e.voyage:  lines.append(f"🧭 Sefer: {e.voyage}")
+    return "\n".join(lines)
+
+
+def build_ship_list(title: str, d: date, entries: list[BerthEntry]) -> str:
+    """Başlıklı düz gemi listesi (/simdi, arama sonuçları)."""
+    if not entries:
+        return f"{title}\n_(gemi yok)_"
+    lines = [f"{title} — {format_date_tr(d)} ({len(entries)} gemi)", ""]
+    lines += [_line(e) for e in entries]
+    return "\n".join(lines)
+
+
+def build_berth_view(d: date, berth: str, entries: list[BerthEntry]) -> str:
+    """Belirli rıhtımdaki gemiler, yanaşma saatine göre sıralı (/rihtim)."""
+    sel = [e for e in entries if e.berth.upper() == berth.upper()]
+    sel.sort(key=lambda e: e.arrival or "")
+    if not sel:
+        return f"⚓ *{berth.upper()}* — bu rıhtımda gemi yok ({format_date_tr(d)})."
+    lines = [f"⚓ *Rıhtım {berth.upper()}* — {format_date_tr(d)} ({len(sel)} gemi)", ""]
+    for e in sel:
+        cargo = _cargo(e)
+        line = f"• *{e.ship_name}* {_t(e.arrival)} → {_t(e.departure)}"
+        if cargo:
+            line += f"  {cargo}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def build_diff_message(d: date, diff: dict) -> str:
+    """Cache ile canlı veri arasındaki fark (/degisiklik, prefetch uyarısı)."""
+    added   = diff.get("added", [])
+    removed = diff.get("removed", [])
+    changed = diff.get("changed", [])
+    if not (added or removed or changed):
+        return f"✅ {format_date_tr(d)} — değişiklik yok."
+
+    lines = [f"🔔 *{format_date_tr(d)} — değişiklikler*", ""]
+    if changed:
+        lines.append("✏️ *Saati değişen:*")
+        for e, old_arr, old_dep in changed:
+            if e.departure != old_dep:
+                lines.append(f"• *{e.ship_name}* ({e.berth}) çıkış: {_t(old_dep)} → {_t(e.departure)}")
+            else:
+                lines.append(f"• *{e.ship_name}* ({e.berth}) geliş: {_t(old_arr)} → {_t(e.arrival)}")
+        lines.append("")
+    if added:
+        lines.append("🟢 *Yeni eklenen:*")
+        lines += [_line(e) for e in added]
+        lines.append("")
+    if removed:
+        lines.append("⚪ *Listeden çıkan:*")
+        lines += [f"• *{e.ship_name}* ({e.berth})" for e in removed]
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def build_shifts_list(shifts: list[date]) -> str:

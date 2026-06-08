@@ -32,11 +32,17 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 import config
-from scraper import get_shift_report, fetch_live, prefetch_tomorrow, BerthEntry, _save_cache
+from scraper import (
+    get_shift_report, fetch_live, fetch_entries, fetch_live_diff,
+    prefetch_tomorrow, BerthEntry, _save_cache,
+)
 from shift_manager import (
     add_shift, remove_shift, is_shift_day, get_upcoming_shifts, format_date_tr,
 )
-from formatter import build_shift_message, build_shifts_list
+from formatter import (
+    build_shift_message, build_shifts_list, build_ship_detail,
+    build_ship_list, build_berth_view, build_diff_message,
+)
 
 logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
@@ -119,6 +125,10 @@ async def cmd_yardim(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "  örn: /rapor 4 12 _(bugün 16:00–24:00)_\n"
         "  örn: /rapor 2026-06-10 gece\n"
         "  vardiyalar: 8-4, 4-12, 12-8 ya da düz saat (16 24)\n"
+        "/gemi MSC ALIX — tek gemi detayı\n"
+        "/rihtim B3 — o rıhtımdaki gemiler\n"
+        "/simdi — şu an limanda olanlar\n"
+        "/degisiklik — kayıtlı veriye göre değişenler\n"
         "/prefetch — yarınki veriyi şimdi çek\n\n"
         "*Manuel gemi girişi _(scraping çalışmıyorsa):_*\n"
         "/gemi\\_ekle MSC BELLA BERTH2 06:00 20:00 NAF\n"
@@ -282,6 +292,81 @@ async def cmd_rapor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def cmd_gemi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/gemi MSC ALIX → eşleşen geminin/gemilerin tüm detayı."""
+    if not ctx.args:
+        await update.message.reply_text(
+            "Kullanım: /gemi GemiAdı\nÖrnek: /gemi MSC ALIX", parse_mode="Markdown")
+        return
+    query = " ".join(ctx.args).upper()
+    today = datetime.now(TZ).date()
+    entries, _ = fetch_entries(today)
+    matches = [e for e in entries if query in e.ship_name.upper()]
+    if not matches:
+        await update.message.reply_text(f"'{query}' bugünkü listede bulunamadı.")
+        return
+    if len(matches) > 6:
+        await update.message.reply_text(
+            f"{len(matches)} eşleşme bulundu, ilk 6 gösteriliyor.")
+        matches = matches[:6]
+    for e in matches:
+        await update.message.reply_text(build_ship_detail(e), parse_mode="Markdown")
+
+
+async def cmd_rihtim(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/rihtim B3 → o rıhtımdaki gemiler, yanaşma sırasına göre."""
+    if not ctx.args:
+        await update.message.reply_text(
+            "Kullanım: /rihtim B3\nÖrnek: /rihtim FB1", parse_mode="Markdown")
+        return
+    berth = ctx.args[0]
+    today = datetime.now(TZ).date()
+    entries, _ = fetch_entries(today)
+    await update.message.reply_text(
+        build_berth_view(today, berth, entries), parse_mode="Markdown")
+
+
+async def cmd_simdi(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/simdi → tam şu anki saate göre limandaki gemiler."""
+    now = datetime.now(TZ)
+    today = now.date()
+    entries, _ = fetch_entries(today)
+    now_naive = now.replace(tzinfo=None)
+    at = [e for e in entries if e.is_active_at(now_naive)]
+    at.sort(key=lambda e: e.departure or "")
+    title = f"🕘 *Şu an limanda* ({now.strftime('%H:%M')})"
+    await update.message.reply_text(
+        build_ship_list(title, today, at), parse_mode="Markdown")
+
+
+async def cmd_degisiklik(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/degisiklik [yarin|tarih] → kayıtlı veriyle canlıyı karşılaştır."""
+    today = datetime.now(TZ).date()
+    target = today
+    if ctx.args:
+        a = ctx.args[0].lower()
+        if a in ("yarin", "yarın"):
+            target = today + timedelta(days=1)
+        else:
+            try:
+                target = date.fromisoformat(ctx.args[0])
+            except ValueError:
+                pass
+    await update.message.reply_text(
+        f"🔄 {target.isoformat()} için değişiklikler kontrol ediliyor...")
+    diff, source = fetch_live_diff(target)
+    if source == "no_data":
+        await update.message.reply_text("❌ Canlı veri çekilemedi.")
+        return
+    if not diff:
+        await update.message.reply_text(
+            "ℹ️ Karşılaştırılacak önceki kayıt yoktu (ilk çekiş). "
+            "Veri şimdi kaydedildi; bir sonraki sefer değişiklikleri gösteririm.")
+        return
+    await update.message.reply_text(
+        build_diff_message(target, diff), parse_mode="Markdown")
+
+
 async def cmd_prefetch(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     today = datetime.now(TZ).date()
     await update.message.reply_text(
@@ -423,7 +508,9 @@ async def job_prefetch(app: Application):
         return
 
     log.info(f"Pre-fetch başlıyor: {tomorrow}")
-    count, source = prefetch_tomorrow(today)
+    diff, source = fetch_live_diff(tomorrow)
+    entries, _ = fetch_entries(tomorrow)
+    count = len(entries)
     if count:
         log.info(f"Pre-fetch tamamlandı: {count} gemi ({source})")
         if config.CHAT_ID:
@@ -431,6 +518,13 @@ async def job_prefetch(app: Application):
                 chat_id=config.CHAT_ID,
                 text=f"📦 Yarının gemi verisi hazırlandı ({count} gemi). Sabah 07:30'da gönderilecek."
             )
+            # Önceki kayda göre değişiklik varsa ayrıca bildir
+            if diff and (diff.get("added") or diff.get("removed") or diff.get("changed")):
+                await app.bot.send_message(
+                    chat_id=config.CHAT_ID,
+                    text=build_diff_message(tomorrow, diff),
+                    parse_mode="Markdown",
+                )
     else:
         log.warning("Pre-fetch başarısız, veri bulunamadı.")
         if config.CHAT_ID:
@@ -457,6 +551,10 @@ def main():
     app.add_handler(CommandHandler("vardiya_sil",  cmd_vardiya_sil))
     app.add_handler(CommandHandler("kontrol",      cmd_kontrol))
     app.add_handler(CommandHandler("rapor",        cmd_rapor))
+    app.add_handler(CommandHandler("gemi",         cmd_gemi))
+    app.add_handler(CommandHandler("rihtim",       cmd_rihtim))
+    app.add_handler(CommandHandler("simdi",        cmd_simdi))
+    app.add_handler(CommandHandler("degisiklik",   cmd_degisiklik))
     app.add_handler(CommandHandler("prefetch",     cmd_prefetch))
     app.add_handler(CommandHandler("gemi_ekle",    cmd_gemi_ekle))
     app.add_handler(CommandHandler("gemiler",      cmd_gemiler))
@@ -489,6 +587,10 @@ def main():
             BotCommand("vardiya_sil",  "Vardiya günü sil"),
             BotCommand("kontrol",      "Raporu şimdi göster"),
             BotCommand("rapor",        "Gün + vardiya sorgula"),
+            BotCommand("gemi",         "Tek gemi detayı"),
+            BotCommand("rihtim",       "Rıhtımdaki gemiler"),
+            BotCommand("simdi",        "Şu an limanda"),
+            BotCommand("degisiklik",   "Değişiklikleri göster"),
             BotCommand("prefetch",     "Yarınki veriyi çek"),
             BotCommand("gemi_ekle",    "Manuel gemi ekle"),
             BotCommand("gemiler",      "Manuel gemiler"),
