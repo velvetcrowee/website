@@ -40,6 +40,8 @@ class BerthEntry:
     departure:  Optional[str]
     agent:      str = ""
     load_info:  str = ""
+    load_van:   str = ""   # yüklenecek konteyner (loadvan)
+    dis_van:    str = ""   # tahliye edilecek konteyner (disvan)
 
     def arrival_dt(self) -> Optional[datetime]:
         return datetime.fromisoformat(self.arrival) if self.arrival else None
@@ -383,6 +385,8 @@ def _amf_to_entries(vessels: list[dict], ref: date) -> list[BerthEntry]:
             departure=dep_dt.isoformat() if dep_dt else None,
             agent=g('vslOperator', 'agent', 'agentName'),
             load_info=g('outservice', 'inservice', 'berthside', 'loadInfo'),
+            load_van=g('loadvan', 'loadVan'),
+            dis_van=g('disvan', 'disVan'),
         ))
     return entries
 

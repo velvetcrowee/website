@@ -13,6 +13,16 @@ def _t(dt_iso: str | None) -> str:
         return dt_iso
 
 
+def _cargo(e: BerthEntry) -> str:
+    """'📦 yük X / tahliye Y' (sıfır/boş olanlar atlanır)."""
+    bits = []
+    if e.load_van:
+        bits.append(f"yük {e.load_van}")
+    if e.dis_van:
+        bits.append(f"tahliye {e.dis_van}")
+    return "📦 " + " / ".join(bits) if bits else ""
+
+
 def _line(e: BerthEntry) -> str:
     parts = [f"• *{e.ship_name}*"]
     if e.berth:
@@ -21,6 +31,9 @@ def _line(e: BerthEntry) -> str:
         parts.append(f"→ çıkış: {_t(e.departure)}")
     if e.agent:
         parts.append(f"[{e.agent}]")
+    cargo = _cargo(e)
+    if cargo:
+        parts.append(cargo)
     return " ".join(parts)
 
 
@@ -75,6 +88,8 @@ def build_shift_message(report: dict) -> str:
             if e.berth:  parts.append(f"({e.berth})")
             if e.arrival: parts.append(f"→ geliş: {_t(e.arrival)}")
             if e.agent:  parts.append(f"[{e.agent}]")
+            cargo = _cargo(e)
+            if cargo: parts.append(cargo)
             lines.append(" ".join(parts))
 
     return "\n".join(lines)
