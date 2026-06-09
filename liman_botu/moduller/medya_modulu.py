@@ -36,6 +36,10 @@ import config
 
 logger = logging.getLogger("liman_botu.medya")
 
+# Bu modülün sahiplendiği komutlar. main.py otomatik yükleyici bunu okur.
+# Aynı handle'a birden fazla komut bağlanabilir (izledim = okudum mantığı).
+KOMUTLAR = ["izledim", "okudum"]
+
 
 # =============================================================================
 # Adım A — GEMINI ile ayrıştırma

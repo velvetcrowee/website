@@ -4,12 +4,15 @@ Temiz, modüler bir mimari. `main.py` sadece yönlendirir; iş mantığı modül
 
 ```
 liman_botu/
-├── main.py            # Ana yönlendirici (santral). İş mantığı yok.
-├── config.py          # .env'den tüm ayarları okur. Tek doğruluk kaynağı.
-├── liman_modulu.py    # /liman — vardiya & iş takibi (sınıf tabanlı)
-├── medya_modulu.py    # /izledim, /okudum — Gemini + TMDB/Jikan + Obsidian
+├── main.py                  # Yönlendirici + otomatik modül yükleyici. İş mantığı yok.
+├── config.py                # .env'den tüm ayarları okur. Tek doğruluk kaynağı.
+├── moduller/                # Tüm özellik modülleri burada; main.py bunu tarar.
+│   ├── __init__.py
+│   ├── _sablon.py           # Yeni modül için kopyala-yapıştır şablonu (yüklenmez).
+│   ├── liman_modulu.py      # /liman — vardiya & iş takibi (sınıf tabanlı)
+│   └── medya_modulu.py      # /izledim, /okudum — Gemini + TMDB/Jikan + Obsidian
 ├── requirements.txt
-└── .env.example       # Kopyala -> .env yap, anahtarları doldur
+└── .env.example             # Kopyala -> .env yap, anahtarları doldur
 ```
 
 ## Kurulum
@@ -22,27 +25,28 @@ cp .env.example .env        # sonra .env içini doldur
 python main.py
 ```
 
-## Modüller nasıl haberleşir?
+## Modüller nasıl haberleşir? (Otomatik Keşif)
 
-`main.py` içindeki **KOMUT_TABLOSU** tek bağlantı noktasıdır:
+Artık elle bir komut tablosu yok. `main.py` açılışta `moduller/` paketini tarar
+ve şu ikisini tanımlayan her dosyayı **otomatik** kaydeder:
 
 ```python
-KOMUT_TABLOSU = {
-    "liman":   liman_modulu.handle,
-    "izledim": medya_modulu.handle,
-    "okudum":  medya_modulu.handle,
-}
+KOMUTLAR = ["izledim", "okudum"]          # modülün sahiplendiği komutlar
+async def handle(update, context): ...    # standart giriş noktası
 ```
 
-Telegram'dan `/izledim ...` gelince main.py bunu `medya_modulu.handle`'a paslar.
-Her modülde standart bir imza vardır: `async def handle(update, context)`.
+Telegram'dan `/izledim ...` gelince main.py bunu ilgili modülün `handle`'ına paslar.
+Adı `_` ile başlayan dosyalar (örn. `_sablon.py`) ve bu ikisini tanımlamayan
+dosyalar sessizce atlanır.
 
 ## Yeni modül eklemek (örn. `akilli_ev_modulu.py`)
 
-1. Dosyayı oluştur, içine `async def handle(update, context): ...` yaz.
-2. `main.py`'ye `import akilli_ev_modulu` ekle.
-3. `KOMUT_TABLOSU`'na `"ev": akilli_ev_modulu.handle,` satırını ekle.
-4. Bitti — `/ev` komutu artık otomatik çalışır. Başka yeri değiştirmen gerekmez.
+```bash
+cp moduller/_sablon.py moduller/akilli_ev_modulu.py
+```
+
+Sonra içindeki `KOMUTLAR` ve `handle`'ı doldur, botu yeniden başlat. `/ev` komutu
+otomatik aktif olur — **`main.py`'ye hiç dokunmazsın.**
 
 ## API kotası koruması
 

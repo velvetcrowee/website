@@ -1,16 +1,31 @@
 """
-main.py — Ana Yönlendirici (Dispatcher).
+main.py — Ana Yönlendirici (Dispatcher) + Otomatik Modül Yükleyici.
 
 Görevi TEK ŞEY: Telegram'dan gelen komutları dinlemek ve doğru modüle paslamak.
 Burada hiçbir iş mantığı (business logic) yoktur. Liman işleri liman_modulu'nde,
 medya işleri medya_modulu'nde durur. main.py sadece bir santral memurudur.
 
 API limitlerini (Gemini) korumak için: gelen DÜZ metinler yapay zekaya GİTMEZ.
-Sadece aşağıdaki KOMUT_TABLOSU'nda kayıtlı "/" ön ekli komutlar işlenir.
-Yapay zeka ancak ilgili modül (örn. medya) gerek duyunca tetiklenir.
+Sadece modüllerin ilan ettiği "/" ön ekli komutlar işlenir. Yapay zeka ancak
+ilgili modül (örn. medya) gerek duyunca tetiklenir.
+
+>>> OTOMATİK MODÜL KEŞFİ <<<
+Artık komutları elle bir tabloya yazmıyoruz. main.py açılışta `moduller/`
+paketini tarar ve şu iki şeyi tanımlayan her dosyayı OTOMATİK kaydeder:
+    KOMUTLAR = ["komut_adi", ...]        # modülün sahiplendiği komutlar
+    async def handle(update, context)    # standart giriş noktası
+
+>>> YENİ MODÜL EKLEMEK (örn. akilli_ev_modulu.py): <<<
+    1) moduller/akilli_ev_modulu.py dosyasını oluştur.
+    2) İçine şunları yaz:
+           KOMUTLAR = ["ev"]
+           async def handle(update, context): ...
+    3) Bitti. /ev komutu otomatik çalışır. main.py'ye HİÇ dokunmana gerek yok.
 """
 
+import importlib
 import logging
+import pkgutil
 
 from telegram import Update
 from telegram.ext import (
@@ -20,11 +35,10 @@ from telegram.ext import (
 )
 
 import config
-import liman_modulu
-import medya_modulu
+import moduller  # tarayacağımız paket
 
 # ----------------------------------------------------------------------------
-# Loglama: Konsola ne olup bittiğini düzgün yazsın.
+# Loglama
 # ----------------------------------------------------------------------------
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -34,29 +48,46 @@ logger = logging.getLogger("liman_botu")
 
 
 # ----------------------------------------------------------------------------
-# KOMUT TABLOSU (Routing Registry)
+# OTOMATİK MODÜL KEŞFİ
 # ----------------------------------------------------------------------------
-# Bütün modüllerin bağlandığı yer burası. Her satır:
-#   "komut_adi": ilgili_modulun_handler_fonksiyonu
-#
-# >>> YENİ MODÜL EKLEMEK İÇİN (örn. akilli_ev_modulu.py): <<<
-#   1) Yeni dosyanı yaz ve içinde "async def handle(update, context)" tanımla.
-#   2) Yukarıya  ->  import akilli_ev_modulu  satırını ekle.
-#   3) Aşağıdaki tabloya tek satır ekle:
-#         "ev": akilli_ev_modulu.handle,
-#   4) Bitti. Artık /ev komutu otomatik olarak o modüle gider.
-#   main.py'de başka HİÇBİR yeri değiştirmene gerek yok.
-# ----------------------------------------------------------------------------
-KOMUT_TABLOSU = {
-    "liman": liman_modulu.handle,    # /liman ...  -> vardiya / iş takibi
-    "izledim": medya_modulu.handle,  # /izledim ... -> Obsidian medya kaydı
-    "okudum": medya_modulu.handle,   # /okudum ...  -> manga için aynı modül
-    # "ev": akilli_ev_modulu.handle,   # (örnek: ileride açacağın modül)
-}
+def komut_tablosu_olustur() -> dict:
+    """`moduller/` paketini tarar ve {komut: handler} tablosunu inşa eder.
+
+    Bir modülün kaydedilmesi için iki şart:
+      * modül seviyesinde `KOMUTLAR` listesi olmalı
+      * `handle` adında bir fonksiyon olmalı
+    Bu ikisinden biri eksikse modül sessizce atlanır (yardımcı dosyalar,
+    __init__.py vb. bozmasın diye).
+    """
+    tablo: dict = {}
+
+    for modul_bilgi in pkgutil.iter_modules(moduller.__path__):
+        ad = modul_bilgi.name
+        if ad.startswith("_"):
+            continue  # __init__ vb. atla
+
+        modul = importlib.import_module(f"moduller.{ad}")
+        komutlar = getattr(modul, "KOMUTLAR", None)
+        handler = getattr(modul, "handle", None)
+
+        if not komutlar or not callable(handler):
+            logger.debug("Atlandı (KOMUTLAR/handle yok): %s", ad)
+            continue
+
+        for komut in komutlar:
+            if komut in tablo:
+                logger.warning(
+                    "Komut çakışması: /%s zaten kayıtlı, '%s' modülü eziyor.",
+                    komut, ad,
+                )
+            tablo[komut] = handler
+            logger.info("Kaydedildi: /%s -> %s", komut, ad)
+
+    return tablo
 
 
 # ----------------------------------------------------------------------------
-# Erişim kontrolü: Botu sadece izinli kişiler kullansın.
+# Erişim kontrolü
 # ----------------------------------------------------------------------------
 def _izinli_mi(update: Update) -> bool:
     if not config.ALLOWED_USER_IDS:
@@ -65,48 +96,49 @@ def _izinli_mi(update: Update) -> bool:
     return bool(user and user.id in config.ALLOWED_USER_IDS)
 
 
-async def baslat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/start — kısa bir karşılama ve mevcut komutların listesi."""
-    komutlar = ", ".join(f"/{k}" for k in KOMUT_TABLOSU)
-    await update.message.reply_text(
-        "Liman Botu hazır. ⚓\n"
-        f"Kullanabileceğin komutlar: {komutlar}"
-    )
+def _yetki_sarmalayici(handler):
+    """Her modül handler'ını erişim kontrolüyle çevreler.
+
+    Böylece yetki mantığı tek yerde durur; modüller bununla uğraşmaz.
+    """
+    async def sarmalanmis(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not _izinli_mi(update):
+            await update.message.reply_text("Bu botu kullanma yetkin yok. 🚫")
+            return
+        await handler(update, context)
+
+    return sarmalanmis
 
 
-async def izinsiz(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Bu botu kullanma yetkin yok. 🚫")
+# ----------------------------------------------------------------------------
+# /start
+# ----------------------------------------------------------------------------
+def _start_handler(komut_tablosu: dict):
+    async def baslat(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        komutlar = ", ".join(f"/{k}" for k in sorted(komut_tablosu))
+        await update.message.reply_text(
+            "Liman Botu hazır. ⚓\n"
+            f"Kullanabileceğin komutlar: {komutlar or '(henüz yok)'}"
+        )
+    return baslat
 
 
 def main() -> None:
     config.dogrula()
 
+    komut_tablosu = komut_tablosu_olustur()
+
     app = Application.builder().token(config.TELEGRAM_TOKEN).build()
 
-    # /start her zaman çalışsın.
-    app.add_handler(CommandHandler("start", baslat))
+    # /start her zaman çalışsın (keşfedilen komutları listeler).
+    app.add_handler(CommandHandler("start", _start_handler(komut_tablosu)))
 
-    # KOMUT_TABLOSU'ndaki her komutu, izin kontrolüyle sarıp kaydet.
-    for komut, handler in KOMUT_TABLOSU.items():
+    # Keşfedilen her komutu, izin kontrolüyle sarıp kaydet.
+    for komut, handler in komut_tablosu.items():
         app.add_handler(CommandHandler(komut, _yetki_sarmalayici(handler)))
 
-    logger.info("Bot başlıyor... Kayıtlı komutlar: %s", list(KOMUT_TABLOSU))
+    logger.info("Bot başlıyor... Aktif komutlar: %s", sorted(komut_tablosu))
     app.run_polling()
-
-
-def _yetki_sarmalayici(handler):
-    """Her modül handler'ını erişim kontrolüyle çevreleyen yardımcı.
-
-    Böylece her modülde tek tek 'bu kullanıcı izinli mi' diye bakmak gerekmez;
-    yetki mantığı tek yerde (burada) durur.
-    """
-    async def sarmalanmis(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not _izinli_mi(update):
-            await izinsiz(update, context)
-            return
-        await handler(update, context)
-
-    return sarmalanmis
 
 
 if __name__ == "__main__":

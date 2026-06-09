@@ -17,6 +17,10 @@ from telegram.ext import ContextTypes
 
 logger = logging.getLogger("liman_botu.liman")
 
+# Bu modülün sahiplendiği komutlar. main.py'deki otomatik yükleyici bunu okur;
+# yeni komut eklemek için main.py'ye dokunmana gerek yok.
+KOMUTLAR = ["liman"]
+
 
 class LimanYoneticisi:
     """Liman ile ilgili tüm işlevlerin toplandığı sınıf.
