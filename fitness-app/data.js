@@ -99,6 +99,16 @@ function proteinTarget() {
 	return kg ? Math.round(kg * 1.8) : null;
 }
 
+/* Dış ağırlık gerektirmeyen hareketler (vücut ağırlığı / kardiyo / esneme).
+   Yeni programlarda yapay zekâ bodyweight alanını doldurur; eski kayıtlar
+   için isim üzerinden tahmin edilir. */
+const BODYWEIGHT_RE = /(plank|yürüyüş|koşu|kardiyo|esneme|mobilite|crunch|mekik|şınav|burpee|jumping|ip atlama|leg raise|sit ?up|dağcı|mountain climber|superman|bisiklet|hiit|yüzme|bicycle)/i;
+
+function isBodyweight(ex) {
+	if (typeof ex.bodyweight === "boolean") return ex.bodyweight;
+	return BODYWEIGHT_RE.test(ex.name);
+}
+
 const GOAL_LABELS = {
 	"fatloss-muscle": "kilo verme ve aynı anda kas kazanma (body recomposition)",
 	"muscle": "kas kütlesi kazanma (bulk)",
@@ -133,10 +143,10 @@ const DEFAULT_PROGRAM = {
 		{
 			dayOfWeek: 3, name: "Kardiyo + Karın", focus: "Yağ yakımı ve core",
 			exercises: [
-				{ name: "Tempolu Yürüyüş / Koşu (30-40 dk)", sets: 1, reps: 1 },
-				{ name: "Plank (45 sn)", sets: 3, reps: 1 },
-				{ name: "Crunch", sets: 3, reps: 20 },
-				{ name: "Leg Raise", sets: 3, reps: 15 },
+				{ name: "Tempolu Yürüyüş / Koşu (30-40 dk)", sets: 1, reps: 1, bodyweight: true },
+				{ name: "Plank (45 sn)", sets: 3, reps: 1, bodyweight: true },
+				{ name: "Crunch", sets: 3, reps: 20, bodyweight: true },
+				{ name: "Leg Raise", sets: 3, reps: 15, bodyweight: true },
 			],
 		},
 		{
@@ -162,8 +172,8 @@ const DEFAULT_PROGRAM = {
 		{
 			dayOfWeek: 6, name: "Aktif Dinlenme", focus: "Hafif kardiyo, esneme",
 			exercises: [
-				{ name: "Yürüyüş (45-60 dk)", sets: 1, reps: 1 },
-				{ name: "Esneme / Mobilite (15 dk)", sets: 1, reps: 1 },
+				{ name: "Yürüyüş (45-60 dk)", sets: 1, reps: 1, bodyweight: true },
+				{ name: "Esneme / Mobilite (15 dk)", sets: 1, reps: 1, bodyweight: true },
 			],
 		},
 		{

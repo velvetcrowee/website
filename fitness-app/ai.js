@@ -203,8 +203,9 @@ async function aiGenerateProgram() {
 									name: { type: "string", description: "Hareketin adı (yaygın kullanılan haliyle)" },
 									sets: { type: "integer" },
 									reps: { type: "integer" },
+									bodyweight: { type: "boolean", description: "Dış ağırlık (dambıl/barbell/makine) kullanılmıyorsa true — vücut ağırlığı, kardiyo, esneme" },
 								},
-								required: ["name", "sets", "reps"],
+								required: ["name", "sets", "reps", "bodyweight"],
 							},
 						},
 					},
@@ -231,7 +232,9 @@ async function aiGenerateProgram() {
 			"(örn. 3x12, 4x10); haftada 1-2 dinlenme veya kardiyo günü olsun; gün adları ve açıklamalar " +
 			"Türkçe, hareket adları salonlarda yaygın kullanılan haliyle yazılsın. " +
 			"dayOfWeek alanında 1 Pazartesi, 7 Pazar demektir ve 7 günün tamamı listede olmalı " +
-			"(dinlenme günü için exercises boş dizi olabilir).",
+			"(dinlenme günü için exercises boş dizi olabilir). " +
+			"Her hareket için bodyweight alanını doldur: plank, koşu, esneme gibi dış ağırlık " +
+			"kullanılmayan hareketlerde true, dambıl/barbell/makine hareketlerinde false.",
 	});
 }
 
