@@ -15,6 +15,12 @@ paketini tarar ve şu iki şeyi tanımlayan her dosyayı OTOMATİK kaydeder:
     KOMUTLAR = ["komut_adi", ...]        # modülün sahiplendiği komutlar
     async def handle(update, context)    # standart giriş noktası
 
+Bir modül İSTEĞE BAĞLI olarak buton (inline keyboard) tıklamalarına da cevap
+verebilir. Bunun için şunları ilan eder:
+    CALLBACK_AD = "medya"                  # callback_data'nın ön eki / ad alanı
+    async def callback(update, context)    # buton tıklamalarının giriş noktası
+main.py, "medya:..." ile başlayan tüm callback'leri ilgili modüle yönlendirir.
+
 >>> YENİ MODÜL EKLEMEK (örn. akilli_ev_modulu.py): <<<
     1) moduller/akilli_ev_modulu.py dosyasını oluştur.
     2) İçine şunları yaz:
@@ -30,6 +36,7 @@ import pkgutil
 from telegram import Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
 )
@@ -50,16 +57,19 @@ logger = logging.getLogger("liman_botu")
 # ----------------------------------------------------------------------------
 # OTOMATİK MODÜL KEŞFİ
 # ----------------------------------------------------------------------------
-def komut_tablosu_olustur() -> dict:
-    """`moduller/` paketini tarar ve {komut: handler} tablosunu inşa eder.
+def moduller_yukle() -> tuple[dict, dict]:
+    """`moduller/` paketini tarar; komut ve callback tablolarını inşa eder.
 
-    Bir modülün kaydedilmesi için iki şart:
-      * modül seviyesinde `KOMUTLAR` listesi olmalı
-      * `handle` adında bir fonksiyon olmalı
-    Bu ikisinden biri eksikse modül sessizce atlanır (yardımcı dosyalar,
-    __init__.py vb. bozmasın diye).
+    Komut için iki şart: modülde `KOMUTLAR` listesi + `handle` fonksiyonu.
+    Callback (buton) için iki şart: `CALLBACK_AD` + `callback` fonksiyonu (opsiyonel).
+
+    Returns:
+        (komut_tablosu, callback_tablosu)
+          komut_tablosu:    {komut_adi: handle_fn}
+          callback_tablosu: {callback_ad: callback_fn}
     """
-    tablo: dict = {}
+    komut_tablosu: dict = {}
+    callback_tablosu: dict = {}
 
     for modul_bilgi in pkgutil.iter_modules(moduller.__path__):
         ad = modul_bilgi.name
@@ -67,23 +77,30 @@ def komut_tablosu_olustur() -> dict:
             continue  # __init__ vb. atla
 
         modul = importlib.import_module(f"moduller.{ad}")
+
+        # --- Komutlar ---
         komutlar = getattr(modul, "KOMUTLAR", None)
         handler = getattr(modul, "handle", None)
+        if komutlar and callable(handler):
+            for komut in komutlar:
+                if komut in komut_tablosu:
+                    logger.warning(
+                        "Komut çakışması: /%s zaten kayıtlı, '%s' modülü eziyor.",
+                        komut, ad,
+                    )
+                komut_tablosu[komut] = handler
+                logger.info("Kaydedildi: /%s -> %s", komut, ad)
+        else:
+            logger.debug("Komut atlandı (KOMUTLAR/handle yok): %s", ad)
 
-        if not komutlar or not callable(handler):
-            logger.debug("Atlandı (KOMUTLAR/handle yok): %s", ad)
-            continue
+        # --- Callback (buton) ---
+        callback_ad = getattr(modul, "CALLBACK_AD", None)
+        callback_fn = getattr(modul, "callback", None)
+        if callback_ad and callable(callback_fn):
+            callback_tablosu[callback_ad] = callback_fn
+            logger.info("Callback kaydedildi: %s: -> %s", callback_ad, ad)
 
-        for komut in komutlar:
-            if komut in tablo:
-                logger.warning(
-                    "Komut çakışması: /%s zaten kayıtlı, '%s' modülü eziyor.",
-                    komut, ad,
-                )
-            tablo[komut] = handler
-            logger.info("Kaydedildi: /%s -> %s", komut, ad)
-
-    return tablo
+    return komut_tablosu, callback_tablosu
 
 
 # ----------------------------------------------------------------------------
@@ -97,7 +114,7 @@ def _izinli_mi(update: Update) -> bool:
 
 
 def _yetki_sarmalayici(handler):
-    """Her modül handler'ını erişim kontrolüyle çevreler.
+    """Komut handler'ını erişim kontrolüyle çevreler.
 
     Böylece yetki mantığı tek yerde durur; modüller bununla uğraşmaz.
     """
@@ -108,6 +125,27 @@ def _yetki_sarmalayici(handler):
         await handler(update, context)
 
     return sarmalanmis
+
+
+def _callback_yonlendirici(callback_tablosu: dict):
+    """Tüm buton tıklamalarını tek noktadan ilgili modüle dağıtır.
+
+    callback_data biçimi: "<ad>:<modüle özel veri>"  (örn. "medya:2")
+    İlk ':' öncesi ad alanına bakılır ve o modülün callback'i çağrılır.
+    """
+    async def yonlendir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        sorgu = update.callback_query
+        if not _izinli_mi(update):
+            await sorgu.answer("Yetkin yok.", show_alert=True)
+            return
+        ad = (sorgu.data or "").split(":", 1)[0]
+        callback_fn = callback_tablosu.get(ad)
+        if callback_fn is None:
+            await sorgu.answer("Bilinmeyen işlem.")
+            return
+        await callback_fn(update, context)
+
+    return yonlendir
 
 
 # ----------------------------------------------------------------------------
@@ -126,7 +164,7 @@ def _start_handler(komut_tablosu: dict):
 def main() -> None:
     config.dogrula()
 
-    komut_tablosu = komut_tablosu_olustur()
+    komut_tablosu, callback_tablosu = moduller_yukle()
 
     app = Application.builder().token(config.TELEGRAM_TOKEN).build()
 
@@ -137,7 +175,14 @@ def main() -> None:
     for komut, handler in komut_tablosu.items():
         app.add_handler(CommandHandler(komut, _yetki_sarmalayici(handler)))
 
-    logger.info("Bot başlıyor... Aktif komutlar: %s", sorted(komut_tablosu))
+    # Tüm buton tıklamaları tek yönlendiriciden geçer (callback_data ön ekine göre).
+    if callback_tablosu:
+        app.add_handler(CallbackQueryHandler(_callback_yonlendirici(callback_tablosu)))
+
+    logger.info(
+        "Bot başlıyor... Komutlar: %s | Callback'ler: %s",
+        sorted(komut_tablosu), sorted(callback_tablosu),
+    )
     app.run_polling()
 
 

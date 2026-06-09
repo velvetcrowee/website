@@ -10,7 +10,7 @@ liman_botu/
 │   ├── __init__.py
 │   ├── _sablon.py           # Yeni modül için kopyala-yapıştır şablonu (yüklenmez).
 │   ├── liman_modulu.py      # /liman — vardiya & iş takibi (sınıf tabanlı)
-│   └── medya_modulu.py      # /izledim, /okudum — TMDB/Jikan + servisler
+│   └── medya_modulu.py      # /izledim, /okudum — akıllı seçim + TMDB/Jikan + servisler
 ├── servisler/               # Paylaşımlı altyapı; modüller buradan import eder.
 │   ├── __init__.py
 │   ├── gemini.py            # Tek yerden Gemini: uret / json_uret / cevir
@@ -42,6 +42,19 @@ async def handle(update, context): ...    # standart giriş noktası
 Telegram'dan `/izledim ...` gelince main.py bunu ilgili modülün `handle`'ına paslar.
 Adı `_` ile başlayan dosyalar (örn. `_sablon.py`) ve bu ikisini tanımlamayan
 dosyalar sessizce atlanır.
+
+### Butonlar (isteğe bağlı)
+
+Bir modül kullanıcıya buton gösterip cevabını almak isterse (örn. medya modülünün
+"🤔 Hangisini kastettin?" sorusu) şu ikisini ek olarak ilan eder:
+
+```python
+CALLBACK_AD = "medya"                      # callback_data ön eki
+async def callback(update, context): ...   # buton tıklamalarının giriş noktası
+```
+
+main.py, `medya:...` ile başlayan tüm buton tıklamalarını bu modüle yönlendirir.
+Soru ile cevap arasındaki durum `context.user_data` içinde tutulur.
 
 ## Yeni modül eklemek (örn. `akilli_ev_modulu.py`)
 

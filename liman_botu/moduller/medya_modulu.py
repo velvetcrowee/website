@@ -1,30 +1,28 @@
 """
-medya_modulu.py — Medya takibi + Obsidian entegrasyonu.
+medya_modulu.py — Medya takibi + Obsidian entegrasyonu (akıllı seçim ile).
 
-Akış (kullanıcı "/izledim One Piece 271, puanım 6" yazınca):
+Akış (kullanıcı "/izledim xmen, puanım 7" yazınca):
 
-  Adım A — Gemini: Cümleyi ayrıştır, temiz bir JSON çıkar.
-           {title, type, current_episode, rating}
-  Adım B — Zenginleştirme:
-             * dizi/film/anime  -> TMDB (language=tr-TR ile Türkçe özet)
-             * manga            -> Jikan (gerekirse Gemini ile TR'ye çevir)
-           Çekilenler: Türkçe özet, yayın yılı, kapak görseli.
-  Adım C — Obsidian: Dataview uyumlu, YAML frontmatter'lı .md dosyası oluştur
-           ya da varsa sadece bölüm/puan alanlarını güncelle.
+  Adım A — Gemini: Cümleyi ayrıştır -> {title, type, current_episode, rating}
+  Adım B — ARAMA: TMDB (dizi/film/anime) veya Jikan (manga) ile EŞLEŞEN ADAYLARI
+           listeler. Birden fazla aday varsa kullanıcıya butonlarla "Hangisi?"
+           diye sorar (X-Men mi, X-Men 2 mi?). Tek aday varsa direkt yazar.
+  Adım C — SEÇİM sonrası: seçilen eserin konusu/yılı/kapağı + PUAN + İZLEME SAATİ
+           ile Dataview uyumlu .md dosyası oluşturulur veya güncellenir.
 
-Artık Gemini ve Obsidian işleri servisler/ katmanından geliyor; bu modül sadece
-kendi iş akışına (prompt, TMDB/Jikan çağrıları, frontmatter şekli) odaklanır.
+Böylece Obsidian küçük bir veritabanı gibi olur: sonradan nota bakınca filmin
+konusunu, kaç puan verdiğini ve ne zaman izlediğini görürsün.
 
-Not: API çağrıları senkron. python-telegram-bot async olduğundan bunları
-asyncio.to_thread ile sararak event loop'u bloke etmiyoruz.
+Gemini SADECE bu modülde, sadece ayrıştırma ve (gerekirse) çeviride tetiklenir.
 """
 
 import asyncio
 import logging
+from datetime import datetime
 
 import requests
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 import config
@@ -32,13 +30,16 @@ from servisler import gemini, obsidian
 
 logger = logging.getLogger("liman_botu.medya")
 
-# Bu modülün sahiplendiği komutlar. main.py otomatik yükleyici bunu okur.
-# Aynı handle'a birden fazla komut bağlanabilir (izledim = okudum mantığı).
-KOMUTLAR = ["izledim", "okudum"]
+# main.py otomatik yükleyici bunları okur.
+KOMUTLAR = ["izledim", "okudum"]   # komutlar
+CALLBACK_AD = "medya"              # butonlardan gelen callback'lerin ön eki
+
+# Aynı anda gösterilecek en fazla aday sayısı (buton kalabalığı olmasın).
+_MAX_ADAY = 6
 
 
 # =============================================================================
-# Adım A — GEMINI ile ayrıştırma (servis üzerinden)
+# Adım A — GEMINI ile ayrıştırma
 # =============================================================================
 _PARSE_PROMPT = """Aşağıdaki cümleyi bir medya takip kaydına çevir.
 SADECE geçerli JSON döndür, başka hiçbir şey yazma.
@@ -59,19 +60,21 @@ def _ayristir(cumle: str) -> dict:
 
 
 # =============================================================================
-# Adım B — ZENGİNLEŞTİRME (TMDB / Jikan)
+# Adım B — ARAMA (aday listesi üret): TMDB / Jikan
 # =============================================================================
-def _zenginlestir(veri: dict) -> dict:
-    """type'a göre doğru kaynağı seçer ve meta bilgileri ekler."""
+def _arama(veri: dict) -> list[dict]:
+    """type'a göre kaynaktan EŞLEŞEN ADAYLARI normalize edilmiş liste döndürür.
+
+    Her aday: {baslik, yil, ozet, kapak, ozet_dili}
+    """
     if veri.get("type") == "manga":
-        return _jikan_meta(veri)
-    return _tmdb_meta(veri)
+        return _jikan_ara(veri)
+    return _tmdb_ara(veri)
 
 
-def _tmdb_meta(veri: dict) -> dict:
-    """TMDB'den Türkçe özet, yıl ve kapak görseli çeker (dizi/film/anime)."""
+def _tmdb_ara(veri: dict) -> list[dict]:
+    """TMDB'de Türkçe arama yapar (dizi/film/anime); aday listesi döndürür."""
     arama_tipi = "tv" if veri.get("type") in ("dizi", "anime") else "movie"
-
     r = requests.get(
         f"https://api.themoviedb.org/3/search/{arama_tipi}",
         params={
@@ -82,92 +85,150 @@ def _tmdb_meta(veri: dict) -> dict:
         timeout=15,
     )
     r.raise_for_status()
-    sonuclar = r.json().get("results", [])
-    if not sonuclar:
-        return {**veri, "ozet": "", "yil": None, "kapak": None}
+    adaylar = []
+    for s in r.json().get("results", [])[:_MAX_ADAY]:
+        tarih = s.get("first_air_date") or s.get("release_date") or ""
+        poster = s.get("poster_path")
+        adaylar.append({
+            "baslik": s.get("name") or s.get("title") or veri["title"],
+            "yil": tarih[:4] if tarih else None,
+            "ozet": s.get("overview", ""),
+            "kapak": f"https://image.tmdb.org/t/p/w500{poster}" if poster else None,
+            "ozet_dili": "tr",  # TMDB tr-TR ile geldi, çeviri gerekmez
+        })
+    return adaylar
 
-    ilk = sonuclar[0]
-    tarih = ilk.get("first_air_date") or ilk.get("release_date") or ""
-    poster = ilk.get("poster_path")
-    return {
-        **veri,
-        "ozet": ilk.get("overview", ""),
-        "yil": tarih[:4] if tarih else None,
-        "kapak": f"https://image.tmdb.org/t/p/w500{poster}" if poster else None,
-    }
 
-
-def _jikan_meta(veri: dict) -> dict:
-    """Jikan'dan manga meta bilgisi çeker; özet İngilizce ise servisle çevirir."""
+def _jikan_ara(veri: dict) -> list[dict]:
+    """Jikan'da manga arar; aday listesi döndürür (özetler İngilizce)."""
     r = requests.get(
         "https://api.jikan.moe/v4/manga",
-        params={"q": veri["title"], "limit": 1},
+        params={"q": veri["title"], "limit": _MAX_ADAY},
         timeout=15,
     )
     r.raise_for_status()
-    veriler = r.json().get("data", [])
-    if not veriler:
-        return {**veri, "ozet": "", "yil": None, "kapak": None}
-
-    ilk = veriler[0]
-    ozet_en = ilk.get("synopsis", "") or ""
-    return {
-        **veri,
-        "ozet": gemini.cevir(ozet_en) if ozet_en else "",
-        "yil": (ilk.get("published", {}).get("prop", {}).get("from", {}) or {}).get("year"),
-        "kapak": ilk.get("images", {}).get("jpg", {}).get("image_url"),
-    }
+    adaylar = []
+    for m in r.json().get("data", []):
+        yil = (m.get("published", {}).get("prop", {}).get("from", {}) or {}).get("year")
+        adaylar.append({
+            "baslik": m.get("title", veri["title"]),
+            "yil": yil,
+            "ozet": m.get("synopsis", "") or "",
+            "kapak": m.get("images", {}).get("jpg", {}).get("image_url"),
+            "ozet_dili": "en",  # Jikan İngilizce; seçilince çevrilecek
+        })
+    return adaylar
 
 
 # =============================================================================
-# Adım C — OBSIDIAN yazımı (obsidian servisi üzerinden)
+# Adım C — SONLANDIR: seçilen adayı Obsidian'a yaz
 # =============================================================================
-def _kaydet(veri: dict) -> str:
-    """Frontmatter + gövdeyi hazırlar ve obsidian servisine yazdırır."""
+def _sonlandir(veri: dict, aday: dict) -> str:
+    """Seçilen adayın bilgilerini PUAN + İZLEME SAATİ ile birleştirip yazar."""
+    ozet = aday.get("ozet", "")
+    if aday.get("ozet_dili") == "en" and ozet:
+        ozet = gemini.cevir(ozet)  # sadece SEÇİLEN aday çevrilir (kota dostu)
+
+    simdi = datetime.now()
     frontmatter = {
-        "title": veri.get("title", ""),
+        "title": aday["baslik"],
         "type": veri.get("type", ""),
         "rating": veri.get("rating"),
         "current_episode": veri.get("current_episode"),
-        "year": veri.get("yil"),
-        "cover": veri.get("kapak"),
+        "year": aday.get("yil"),
+        "cover": aday.get("kapak"),
+        "izlenme": simdi.strftime("%Y-%m-%d %H:%M"),  # tarih + SAAT
         "guncelleme": "",  # servis bunu bugüne çeker
         "tags": ["medya", veri.get("type", "")],
     }
     govde = (
-        f"# {veri.get('title', '')}\n\n"
-        f"![kapak]({veri.get('kapak') or ''})\n\n"
-        f"## Özet\n{veri.get('ozet') or '_Özet bulunamadı._'}"
+        f"# {aday['baslik']}\n\n"
+        f"![kapak]({aday.get('kapak') or ''})\n\n"
+        f"## Konu\n{ozet or '_Özet bulunamadı._'}"
     )
     return obsidian.kaydet(
         klasor=config.OBSIDIAN_MEDYA_PATH,
-        baslik=veri["title"],
+        baslik=aday["baslik"],
         frontmatter=frontmatter,
         govde=govde,
-        # Dosya zaten varsa SADECE bunları güncelle:
+        # Dosya zaten varsa SADECE bunlar güncellenir (izlenme saati korunur):
         guncellenebilir_alanlar=["rating", "current_episode"],
     )
 
 
 # =============================================================================
-# GİRİŞ NOKTASI — main.py buraya paslar
+# GİRİŞ NOKTASI (komut) — main.py buraya paslar
 # =============================================================================
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/izledim ... veya /okudum ... komutunun giriş noktası."""
     cumle = " ".join(context.args).strip()
     if not cumle:
-        await update.message.reply_text("Örnek: /izledim One Piece 271, puanım 6")
+        await update.message.reply_text("Örnek: /izledim xmen, puanım 7")
         return
 
-    await update.message.reply_text("🔎 İşleniyor...")
+    await update.message.reply_text("🔎 Aranıyor...")
     try:
-        # Bloke eden (senkron) işleri ayrı thread'de çalıştır ki bot donmasın.
-        veri = await asyncio.to_thread(_ayristir, cumle)        # Adım A
-        veri = await asyncio.to_thread(_zenginlestir, veri)     # Adım B
-        sonuc = await asyncio.to_thread(_kaydet, veri)          # Adım C
-    except Exception as exc:  # noqa: BLE001 — kullanıcıya nazik hata dönsün
-        logger.exception("Medya işleme hatası")
+        veri = await asyncio.to_thread(_ayristir, cumle)       # Adım A
+        adaylar = await asyncio.to_thread(_arama, veri)        # Adım B
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Medya arama hatası")
         await update.message.reply_text(f"⚠️ Bir şeyler ters gitti: {exc}")
         return
 
-    await update.message.reply_text(sonuc)
+    if not adaylar:
+        await update.message.reply_text("😕 Eşleşen bir şey bulamadım.")
+        return
+
+    # Tek aday varsa soru sormaya gerek yok, direkt yaz.
+    if len(adaylar) == 1:
+        sonuc = await asyncio.to_thread(_sonlandir, veri, adaylar[0])
+        await update.message.reply_text(sonuc)
+        return
+
+    # Birden fazla aday: kullanıcıya "Hangisi?" diye butonlarla sor.
+    # Seçim callback'te lazım olacağı için bekleyen durumu user_data'da sakla.
+    context.user_data["medya_bekleyen"] = {"veri": veri, "adaylar": adaylar}
+    butonlar = [
+        [InlineKeyboardButton(
+            f"{a['baslik']} ({a['yil'] or '—'})",
+            callback_data=f"{CALLBACK_AD}:{i}",
+        )]
+        for i, a in enumerate(adaylar)
+    ]
+    await update.message.reply_text(
+        "🤔 Hangisini kastettin?",
+        reply_markup=InlineKeyboardMarkup(butonlar),
+    )
+
+
+# =============================================================================
+# GİRİŞ NOKTASI (callback) — kullanıcı bir butona basınca main.py buraya paslar
+# =============================================================================
+async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """'medya:<index>' callback'ini işler: seçilen adayı kaydeder."""
+    sorgu = update.callback_query
+    await sorgu.answer()  # Telegram'a "aldım" de (butondaki saat ikonu kaybolsun).
+
+    bekleyen = context.user_data.pop("medya_bekleyen", None)
+    if not bekleyen:
+        await sorgu.edit_message_text(
+            "⌛ Seçim zaman aşımına uğradı, komutu tekrar gönder."
+        )
+        return
+
+    try:
+        index = int((sorgu.data or "").split(":", 1)[1])
+        aday = bekleyen["adaylar"][index]
+    except (ValueError, IndexError):
+        await sorgu.edit_message_text("⚠️ Geçersiz seçim.")
+        return
+
+    await sorgu.edit_message_text("💾 Kaydediliyor...")
+    try:
+        sonuc = await asyncio.to_thread(_sonlandir, bekleyen["veri"], aday)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Medya kaydetme hatası")
+        await sorgu.edit_message_text(f"⚠️ Bir şeyler ters gitti: {exc}")
+        return
+
+    await sorgu.edit_message_text(sonuc)

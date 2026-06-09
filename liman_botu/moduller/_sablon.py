@@ -41,3 +41,17 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # TODO: gerçek iş mantığını buraya yaz.
     await update.message.reply_text(f"(şablon) Aldığım komut: {' '.join(args)}")
+
+
+# --- İSTEĞE BAĞLI: Buton (inline keyboard) desteği ---------------------------
+# Modülün kullanıcıya buton gösterip cevabını alması gerekiyorsa, aşağıdaki ikisini
+# tanımla. main.py "ev:..." ile başlayan tüm callback'leri buraya yönlendirir.
+# Gerekmiyorsa bu bloğu tamamen silebilirsin.
+#
+# CALLBACK_AD = "ev"
+#
+# async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+#     sorgu = update.callback_query
+#     await sorgu.answer()
+#     secim = sorgu.data.split(":", 1)[1]   # "ev:salon" -> "salon"
+#     await sorgu.edit_message_text(f"Seçtin: {secim}")

@@ -94,6 +94,10 @@ def kaydet(
         logger.info("Güncellendi: %s", yol)
         return f"♻️ Güncellendi: {baslik}"
 
+    # "guncelleme" alanı boş bırakıldıysa oluştururken bugüne çek.
+    if frontmatter.get("guncelleme") == "":
+        frontmatter = {**frontmatter, "guncelleme": date.today().isoformat()}
+
     icerik = frontmatter_olustur(frontmatter)
     if govde:
         icerik += "\n\n" + govde
