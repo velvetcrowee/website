@@ -21,8 +21,21 @@ gerektirmeyen bir PWA (Progressive Web App). Android'de tarayıcıdan açıp
   mesafe otomatik hesaplanır.
 - 💊 **Takviye takibi** — Takviyelerinizi ekleyin, her gün aldıklarınızı
   işaretleyin.
-- 📤 Tüm veriler cihazda saklanır (localStorage); JSON olarak dışa
-  aktarılabilir.
+- ⏱️ **Set arası dinlenme sayacı** — Ağırlık kaydedince 60/90/120 sn
+  seçenekli sayaç açılır; süre bitince titreşimle haber verir.
+- 📈 **Hareket bazlı gelişim grafiği** — Hareket adına dokununca o hareketin
+  ağırlık geçmişi grafikle gösterilir.
+- 🎯 **Günlük kalori & protein hedefi** — Yaş, boy, kilo ve hedefinize göre
+  otomatik hesaplanır (Mifflin-St Jeor); yemek sekmesinde ilerleme çubuğuyla
+  izlenir.
+- 💧 **Su takibi** — Bardak bardak (+250 ml) ekleyin, günlük 2,5 L hedefine
+  göre ilerleme görün.
+- 🔥 **Antrenman serisi** — Kesintisiz antrenman günü serisi ve haftalık
+  antrenman sayısı ana ekranda gösterilir.
+- 📊 **Haftalık yapay zekâ raporu** — Son 7 günün antrenman, beslenme ve kilo
+  verilerini Claude analiz eder; gelişim ve önerileri özetler.
+- 📤 Tüm veriler cihazda saklanır (localStorage); JSON olarak dışa aktarılır
+  ve yedekten geri yüklenebilir.
 
 ## Çalıştırma
 

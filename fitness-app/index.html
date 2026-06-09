@@ -23,7 +23,9 @@
 				<div class="today-label">BUGÜN</div>
 				<h2 id="today-day-name">Yükleniyor…</h2>
 				<p id="today-focus" class="muted"></p>
+				<div id="streak-chips" class="chip-row"></div>
 			</div>
+			<p class="muted hint">İpucu: Hareket adına dokunarak gelişim grafiğini görebilirsiniz.</p>
 			<div id="exercise-list"></div>
 			<div class="card" id="no-program-card" hidden>
 				<p>Henüz bir antrenman programınız yok.</p>
@@ -32,6 +34,8 @@
 			<button id="btn-generate-program" class="btn primary full">🤖 Yapay Zekâ ile Program Oluştur</button>
 			<button id="btn-ai-tips" class="btn ghost full">💡 Bugünkü antrenman için öneri al</button>
 			<div id="ai-tips-box" class="card ai-box" hidden></div>
+			<button id="btn-weekly-report" class="btn ghost full">📊 Haftalık Yapay Zekâ Raporu</button>
+			<div id="weekly-report-box" class="card ai-box" hidden></div>
 		</section>
 
 		<!-- YEMEK -->
@@ -49,15 +53,28 @@
 					<summary>Elle gir</summary>
 					<input type="text" id="manual-food-name" placeholder="Yemek adı">
 					<input type="number" id="manual-food-kcal" placeholder="Kalori (kcal)">
+					<input type="number" id="manual-food-protein" placeholder="Protein (g) — isteğe bağlı">
 					<button id="btn-manual-food" class="btn full">Ekle</button>
 				</details>
 			</div>
 			<div class="card">
 				<div class="row-between">
-					<h2>Bugün Yenenler</h2>
+					<h2>Bugün</h2>
 					<span id="today-kcal" class="badge">0 kcal</span>
 				</div>
+				<div id="macro-bars"></div>
 				<ul id="meal-list" class="item-list"></ul>
+			</div>
+			<div class="card">
+				<div class="row-between">
+					<h2>💧 Su</h2>
+					<span id="water-total" class="badge water">0 ml</span>
+				</div>
+				<div class="water-bar-wrap"><div id="water-bar" class="bar-fill water"></div></div>
+				<div class="row water-row">
+					<button id="btn-water-minus" class="btn">−250 ml</button>
+					<button id="btn-water-plus" class="btn primary">+250 ml</button>
+				</div>
 			</div>
 		</section>
 
@@ -99,7 +116,7 @@
 		<!-- AYARLAR -->
 		<section id="tab-settings" class="tab">
 			<div class="card">
-				<h2>Hedef</h2>
+				<h2>Profil & Hedef</h2>
 				<select id="goal-select">
 					<option value="fatloss-muscle">Kilo verme + kas kazanımı</option>
 					<option value="muscle">Kas kazanımı (bulk)</option>
@@ -107,6 +124,15 @@
 					<option value="maintain">Koruma / form</option>
 				</select>
 				<input type="number" id="target-weight" step="0.1" placeholder="Hedef kilo (kg) — isteğe bağlı">
+				<div class="row">
+					<input type="number" id="profile-age" placeholder="Yaş">
+					<input type="number" id="profile-height" placeholder="Boy (cm)">
+				</div>
+				<select id="profile-gender">
+					<option value="m">Erkek</option>
+					<option value="f">Kadın</option>
+				</select>
+				<p class="muted">Yaş ve boy girilirse günlük kalori/protein hedefiniz otomatik hesaplanır.</p>
 				<button id="btn-save-goal" class="btn primary full">Kaydet</button>
 			</div>
 			<div class="card">
@@ -119,10 +145,34 @@
 			<div class="card">
 				<h2>Veriler</h2>
 				<button id="btn-export" class="btn full">📤 Verileri dışa aktar (JSON)</button>
+				<button id="btn-import" class="btn full">📥 Yedekten geri yükle</button>
+				<input type="file" id="import-file" accept="application/json" hidden>
 				<button id="btn-reset" class="btn danger full">Tüm verileri sil</button>
 			</div>
 		</section>
 	</main>
+
+	<!-- Set arası dinlenme sayacı -->
+	<div id="rest-timer" hidden>
+		<span id="rest-label">⏱️ Dinlenme:</span>
+		<span id="rest-count"></span>
+		<button class="btn rest-btn" data-sec="60">60 sn</button>
+		<button class="btn rest-btn" data-sec="90">90 sn</button>
+		<button class="btn rest-btn" data-sec="120">120 sn</button>
+		<button id="rest-close" class="del">✕</button>
+	</div>
+
+	<!-- Hareket gelişim grafiği -->
+	<div id="modal" hidden>
+		<div class="modal-card">
+			<div class="row-between">
+				<h2 id="modal-title"></h2>
+				<button id="modal-close" class="del">✕</button>
+			</div>
+			<canvas id="modal-chart" width="640" height="280"></canvas>
+			<ul id="modal-list" class="item-list"></ul>
+		</div>
+	</div>
 
 	<nav class="bottom-nav">
 		<button data-tab="tab-workout" class="nav-btn active"><span>🏋️</span>Antrenman</button>

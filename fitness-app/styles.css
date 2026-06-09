@@ -216,3 +216,87 @@ canvas { width: 100%; height: auto; }
 
 .spinner { display: inline-block; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Seri / hafta çipleri */
+.chip-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.chip {
+	background: var(--card-2);
+	border-radius: 999px;
+	padding: 4px 12px;
+	font-size: 0.78rem;
+	color: var(--text);
+}
+.hint { margin: 0 4px 8px; }
+
+/* Makro / su ilerleme çubukları */
+.bar-label {
+	display: flex;
+	justify-content: space-between;
+	font-size: 0.8rem;
+	color: var(--muted);
+	margin: 6px 0 4px;
+}
+.bar-wrap, .water-bar-wrap {
+	background: var(--card-2);
+	border-radius: 999px;
+	height: 10px;
+	overflow: hidden;
+	margin-bottom: 4px;
+}
+.water-bar-wrap { margin: 4px 0 10px; }
+.bar-fill {
+	height: 100%;
+	background: var(--accent);
+	border-radius: 999px;
+	transition: width 0.3s ease;
+}
+.bar-fill.protein { background: #60a5fa; }
+.bar-fill.over { background: var(--danger); }
+.bar-fill.water { background: #38bdf8; }
+#macro-bars { margin-bottom: 10px; }
+
+.badge.water { background: #0369a1; }
+.water-row .btn { flex: 1; }
+
+/* Dinlenme sayacı */
+#rest-timer {
+	position: fixed;
+	bottom: 62px;
+	left: 8px;
+	right: 8px;
+	background: #1e293b;
+	border: 1px solid #334155;
+	border-radius: var(--radius);
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 10px;
+	z-index: 20;
+	font-size: 0.85rem;
+}
+#rest-count { color: var(--accent); font-weight: 800; min-width: 52px; }
+.rest-btn { padding: 7px 10px; font-size: 0.8rem; }
+#rest-close { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 1rem; cursor: pointer; }
+
+/* Modal */
+#modal {
+	position: fixed;
+	inset: 0;
+	background: rgba(2, 6, 23, 0.75);
+	z-index: 40;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+}
+.modal-card {
+	background: var(--card);
+	border-radius: var(--radius);
+	padding: 16px;
+	width: 100%;
+	max-width: 560px;
+	max-height: 85vh;
+	overflow-y: auto;
+}
+.up { color: var(--accent); font-size: 0.78rem; }
+.down { color: var(--danger); font-size: 0.78rem; }

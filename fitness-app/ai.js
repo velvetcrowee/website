@@ -183,6 +183,66 @@ async function aiDailyTips(todayPlan) {
 	return block ? block.text : "";
 }
 
+/* Son 7 günün tüm verilerini analiz edip Türkçe haftalık rapor üretir. */
+async function aiWeeklyReport() {
+	const days = [];
+	for (let i = 6; i >= 0; i--) {
+		const d = new Date();
+		d.setDate(d.getDate() - i);
+		days.push(todayKey(d));
+	}
+
+	const logs = Store.workoutLogs;
+	const workoutLines = days
+		.filter((d) => logs[d])
+		.map((d) => `${d}: ${Object.entries(logs[d]).map(([ex, v]) => `${ex} ${v.weight} kg`).join(", ")}`)
+		.join("\n") || "Bu hafta antrenman kaydı yok.";
+
+	const meals = Store.meals.filter((m) => days.includes(m.date));
+	const kcalByDay = days
+		.map((d) => {
+			const dayMeals = meals.filter((m) => m.date === d);
+			if (!dayMeals.length) return null;
+			const kcal = dayMeals.reduce((a, m) => a + m.kcal, 0);
+			const prot = dayMeals.reduce((a, m) => a + (m.protein || 0), 0);
+			return `${d}: ${kcal} kcal, ${prot} g protein`;
+		})
+		.filter(Boolean)
+		.join("\n") || "Bu hafta yemek kaydı yok.";
+
+	const weights = Store.weights.filter((w) => days.includes(w.date));
+	const weightLines = weights.map((w) => `${w.date}: ${w.kg} kg`).join("\n") || "Bu hafta kilo kaydı yok.";
+
+	const s = Store.settings;
+	const goal = GOAL_LABELS[s.goal] || GOAL_LABELS["fatloss-muscle"];
+	const kcalTarget = calorieTarget();
+	const protTarget = proteinTarget();
+
+	const response = await claudeRequest({
+		max_tokens: 3000,
+		messages: [
+			{
+				role: "user",
+				content:
+					`Fitness verilerimin haftalık değerlendirmesini yap. Hedefim: ${goal}.` +
+					(s.targetWeight ? ` Hedef kilom: ${s.targetWeight} kg.` : "") +
+					(kcalTarget ? ` Günlük kalori hedefim: ${kcalTarget} kcal, protein hedefim: ${protTarget} g.` : "") +
+					`\n\nANTRENMANLAR (hareket ve kaldırılan ağırlık):\n${workoutLines}` +
+					`\n\nBESLENME (günlük toplamlar):\n${kcalByDay}` +
+					`\n\nKİLO:\n${weightLines}` +
+					"\n\nTürkçe, kısa ve samimi bir haftalık rapor yaz: " +
+					"1) Antrenman gelişimi (ağırlık artışları/eksik günler), " +
+					"2) Beslenme değerlendirmesi (kalori/protein hedefe uygun mu), " +
+					"3) Kilo gidişatı, " +
+					"4) Gelecek hafta için 2-3 somut öneri. " +
+					"Toplam 180 kelimeyi geçme, emoji kullanabilirsin, başlıkları kısa tut.",
+			},
+		],
+	});
+	const block = response.content.find((b) => b.type === "text");
+	return block ? block.text : "";
+}
+
 /* Fotoğrafı küçültüp JPEG base64'e çevirir (maliyet ve boyut limiti için). */
 function resizeImageToBase64(file, maxEdge = 1024) {
 	return new Promise((resolve, reject) => {

@@ -19,7 +19,10 @@ const DB = {
 
 const Store = {
 	get settings() {
-		return DB.read("settings", { goal: "fatloss-muscle", targetWeight: null, apiKey: "" });
+		return DB.read("settings", {
+			goal: "fatloss-muscle", targetWeight: null, apiKey: "",
+			age: null, height: null, gender: "m",
+		});
 	},
 	set settings(v) { DB.write("settings", v); },
 
@@ -47,6 +50,10 @@ const Store = {
 	get suppLogs() { return DB.read("suppLogs", {}); },
 	set suppLogs(v) { DB.write("suppLogs", v); },
 
+	// Su kayıtları: { "YYYY-MM-DD": ml }
+	get waterLogs() { return DB.read("waterLogs", {}); },
+	set waterLogs(v) { DB.write("waterLogs", v); },
+
 	resetAll() {
 		Object.keys(localStorage)
 			.filter((k) => k.startsWith("fittakip."))
@@ -67,6 +74,28 @@ function todayKey(d = new Date()) {
 	const m = String(d.getMonth() + 1).padStart(2, "0");
 	const g = String(d.getDate()).padStart(2, "0");
 	return `${y}-${m}-${g}`;
+}
+
+const WATER_TARGET_ML = 2500;
+
+/* Günlük kalori hedefi (Mifflin-St Jeor + orta aktivite + hedefe göre düzeltme).
+   Yaş/boy/kilo eksikse null döner. */
+function calorieTarget() {
+	const s = Store.settings;
+	const weights = Store.weights;
+	const kg = weights.length ? weights[weights.length - 1].kg : null;
+	if (!kg || !s.height || !s.age) return null;
+	const bmr = 10 * kg + 6.25 * s.height - 5 * s.age + (s.gender === "f" ? -161 : 5);
+	const tdee = bmr * 1.5;
+	const adj = { "fatloss-muscle": -350, "fatloss": -500, "muscle": 300, "maintain": 0 }[s.goal] || 0;
+	return Math.round(tdee + adj);
+}
+
+/* Günlük protein hedefi: kas koruma/kazanım için ~1.8 g/kg. */
+function proteinTarget() {
+	const weights = Store.weights;
+	const kg = weights.length ? weights[weights.length - 1].kg : null;
+	return kg ? Math.round(kg * 1.8) : null;
 }
 
 const GOAL_LABELS = {
