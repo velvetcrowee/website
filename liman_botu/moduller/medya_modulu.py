@@ -76,19 +76,38 @@ def _arama(veri: dict) -> list[dict]:
     return _tmdb_ara(veri)
 
 
+def _tmdb_get(path: str, params: dict):
+    """TMDB'ye istek atar. Anahtar tipini (v3 api_key vs v4 Bearer token)
+    otomatik algılar; hangisini yapıştırdığın fark etmez."""
+    key = (config.TMDB_API_KEY or "").strip()
+    if not key:
+        raise RuntimeError(
+            "TMDB anahtarı yok. .env dosyana TMDB_API_KEY=... ekle "
+            "(themoviedb.org → Settings → API)."
+        )
+    p = dict(params)
+    headers = {}
+    # v4 token: uzun ve 'eyJ' ile başlayan JWT -> Authorization header ile gider.
+    if key.startswith("eyJ") or len(key) > 45:
+        headers["Authorization"] = f"Bearer {key}"
+    else:  # v3 anahtarı -> api_key query parametresi
+        p["api_key"] = key
+    r = requests.get(f"https://api.themoviedb.org/3{path}", params=p,
+                     headers=headers, timeout=15)
+    if r.status_code == 401:
+        raise RuntimeError(
+            "TMDB anahtarı geçersiz (401). themoviedb.org → Settings → API'den "
+            "doğru anahtarı kopyaladığından emin ol (v3 'API Key' ya da v4 token)."
+        )
+    r.raise_for_status()
+    return r
+
+
 def _tmdb_ara(veri: dict) -> list[dict]:
     """TMDB'de Türkçe arama yapar (dizi/film/anime); aday listesi döndürür."""
     arama_tipi = "tv" if veri.get("type") in ("dizi", "anime") else "movie"
-    r = requests.get(
-        f"https://api.themoviedb.org/3/search/{arama_tipi}",
-        params={
-            "api_key": config.TMDB_API_KEY,
-            "query": veri["title"],
-            "language": "tr-TR",
-        },
-        timeout=15,
-    )
-    r.raise_for_status()
+    r = _tmdb_get(f"/search/{arama_tipi}",
+                  {"query": veri["title"], "language": "tr-TR"})
     adaylar = []
     for s in r.json().get("results", [])[:_MAX_ADAY]:
         tarih = s.get("first_air_date") or s.get("release_date") or ""
