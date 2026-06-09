@@ -77,6 +77,7 @@ main { padding: 0 12px; max-width: 640px; margin: 0 auto; }
 .exercise .ex-last { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
 .exercise .ex-input-row { display: flex; gap: 8px; margin-top: 10px; }
 .exercise .ex-input-row input { flex: 1; }
+.grow { flex: 1; }
 .exercise.done { outline: 1px solid var(--accent-dark); }
 .exercise.done .ex-name::after { content: " ✓"; color: var(--accent); }
 

@@ -1,6 +1,6 @@
 /* Çevrimdışı destek: uygulama kabuğunu önbelleğe alır; API istekleri ağa gider. */
 
-const CACHE = "fittakip-v4";
+const CACHE = "fittakip-v5";
 const ASSETS = [
 	"./",
 	"./index.html",

@@ -41,8 +41,9 @@ function lastWeightFor(exerciseName) {
 	const logs = Store.workoutLogs;
 	const dates = Object.keys(logs).sort().reverse();
 	for (const d of dates) {
-		if (logs[d][exerciseName] !== undefined) {
-			return { date: d, weight: logs[d][exerciseName].weight };
+		const entry = logs[d][exerciseName];
+		if (entry !== undefined && entry.weight !== undefined) {
+			return { date: d, weight: entry.weight };
 		}
 	}
 	return null;
@@ -101,9 +102,38 @@ function renderWorkout() {
 
 	plan.exercises.forEach((ex) => {
 		const saved = todayLog[ex.name];
-		const last = lastWeightFor(ex.name);
 		const div = document.createElement("div");
 		div.className = "exercise" + (saved ? " done" : "");
+
+		if (isBodyweight(ex)) {
+			// Vücut ağırlığı / kardiyo: ağırlık girilmez, tamamlandı olarak işaretlenir.
+			div.innerHTML = `
+				<div class="ex-head">
+					<span class="ex-name" role="button">${ex.name}</span>
+					<span class="ex-scheme">${ex.sets}x${ex.reps}</span>
+				</div>
+				<div class="ex-input-row">
+					<button class="btn ${saved ? "" : "primary"} grow">${saved ? "✓ Yapıldı — geri al" : "Yaptım ✓"}</button>
+				</div>`;
+			div.querySelector(".ex-name").addEventListener("click", () => openExerciseHistory(ex.name));
+			div.querySelector(".ex-input-row button").addEventListener("click", () => {
+				const logs = Store.workoutLogs;
+				if (!logs[today]) logs[today] = {};
+				if (saved) {
+					delete logs[today][ex.name];
+					if (!Object.keys(logs[today]).length) delete logs[today];
+				} else {
+					logs[today][ex.name] = { done: true };
+				}
+				Store.workoutLogs = logs;
+				if (!saved) { toast("Kaydedildi ✓"); showRestTimer(); }
+				renderWorkout();
+			});
+			list.appendChild(div);
+			return;
+		}
+
+		const last = lastWeightFor(ex.name);
 		div.innerHTML = `
 			<div class="ex-head">
 				<span class="ex-name" role="button">${ex.name}</span>
@@ -112,7 +142,7 @@ function renderWorkout() {
 			${last ? `<div class="ex-last">Son kayıt: <b>${last.weight} kg</b> (${last.date})</div>` : ""}
 			<div class="ex-input-row">
 				<input type="number" step="0.5" inputmode="decimal" placeholder="Ağırlık (kg)"
-					value="${saved ? saved.weight : ""}">
+					value="${saved && saved.weight !== undefined ? saved.weight : ""}">
 				<button class="btn primary">Kaydet</button>
 			</div>`;
 		div.querySelector(".ex-name").addEventListener("click", () => openExerciseHistory(ex.name));
@@ -138,29 +168,35 @@ function renderWorkout() {
 
 function openExerciseHistory(name) {
 	const logs = Store.workoutLogs;
-	const entries = Object.keys(logs)
+	const all = Object.keys(logs)
 		.sort()
 		.filter((d) => logs[d][name] !== undefined)
 		.map((d) => ({ date: d, kg: logs[d][name].weight }));
+	const weighted = all.filter((e) => e.kg !== undefined);
 
 	$("#modal-title").textContent = name;
 	const list = $("#modal-list");
 	list.innerHTML = "";
-	if (!entries.length) {
+	if (!all.length) {
 		list.innerHTML = `<li class="muted">Bu hareket için henüz kayıt yok.</li>`;
 	} else {
-		entries.slice().reverse().slice(0, 15).forEach((e, i, arr) => {
-			const prev = arr[i + 1];
-			const diff = prev ? +(e.kg - prev.kg).toFixed(1) : null;
-			const diffHtml = diff === null ? "" :
-				diff > 0 ? ` <span class="up">▲ +${diff}</span>` :
-				diff < 0 ? ` <span class="down">▼ ${diff}</span>` : "";
+		all.slice().reverse().slice(0, 15).forEach((e, i, arr) => {
+			let valHtml = `<span class="val">✓ yapıldı</span>`;
+			if (e.kg !== undefined) {
+				const prev = arr.slice(i + 1).find((p) => p.kg !== undefined);
+				const diff = prev ? +(e.kg - prev.kg).toFixed(1) : null;
+				const diffHtml = diff === null || diff === 0 ? "" :
+					diff > 0 ? ` <span class="up">▲ +${diff}</span>` : ` <span class="down">▼ ${diff}</span>`;
+				valHtml = `<span class="val">${e.kg} kg${diffHtml}</span>`;
+			}
 			const li = document.createElement("li");
-			li.innerHTML = `<div>${e.date}</div><span class="val">${e.kg} kg${diffHtml}</span>`;
+			li.innerHTML = `<div>${e.date}</div>${valHtml}`;
 			list.appendChild(li);
 		});
 	}
-	drawLineChart($("#modal-chart"), entries.map((e) => e.kg), "kg");
+	const canvas = $("#modal-chart");
+	canvas.hidden = weighted.length < 2;
+	drawLineChart(canvas, weighted.map((e) => e.kg), "kg");
 	$("#modal").hidden = false;
 }
 
