@@ -42,7 +42,9 @@ if not ALLOWED_USER_IDS and CHAT_ID.strip().isdigit():
 # Yapay Zeka / API anahtarları (yeni modüller)
 # =============================================================================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-1.5-flash"
+# Tercih edilen model; .env'den değiştirilebilir. Çalışmazsa servis otomatik
+# olarak diğer adayları dener (servisler/gemini.py).
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")
 RAWG_API_KEY = os.getenv("RAWG_API_KEY", "")
 # Hava durumu Open-Meteo ile çalışır; ANAHTAR GEREKTİRMEZ.
