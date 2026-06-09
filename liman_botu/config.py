@@ -79,6 +79,11 @@ PREFETCH_MINUTE = 0
 # Zaman dilimi
 TIMEZONE = "Europe/Istanbul"
 
+# Otomatik (zamanlanmış) veri çekme. Varsayılan: KAPALI.
+# Kapalıyken liman verisi YALNIZCA sen komut girince çekilir (07:30/18:00 job yok).
+# Açmak istersen .env'e: LIMAN_OTOMATIK=1
+LIMAN_OTOMATIK = os.getenv("LIMAN_OTOMATIK", "0").strip().lower() in ("1", "true", "evet", "on")
+
 # Dosya yolları
 SHIFTS_FILE = "shifts.json"
 CACHE_DIR = "cache"

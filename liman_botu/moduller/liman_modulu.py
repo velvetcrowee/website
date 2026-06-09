@@ -708,8 +708,13 @@ KOMUT_ACIKLAMA = {
 
 
 async def setup(app: Application) -> None:
-    """Bot başlarken çağrılır: 07:30 sabah raporu + 18:00 prefetch job'larını kurar.
-    (Komut menüsünü artık main.py tüm modüllerden toplayıp ayarlıyor.)"""
+    """Bot başlarken çağrılır. Otomatik veri çekme SADECE config.LIMAN_OTOMATIK
+    açıksa kurulur; varsayılan kapalıdır (veri yalnızca komutla çekilir)."""
+    if not config.LIMAN_OTOMATIK:
+        log.info("Otomatik liman görevleri KAPALI (veri sadece komutla çekilir). "
+                 "Açmak için .env'e LIMAN_OTOMATIK=1 ekle.")
+        return
+
     jq = app.job_queue
     if jq is None:
         log.warning("job_queue yok; zamanlanmış görevler kurulamadı "
