@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🌱 Bitki Sulama Paneli</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>🌱 Bitki Sulama</h1>
+      <span id="conn" class="badge off">bağlanıyor…</span>
+    </header>
+
+    <section class="grid">
+      <div class="card big" id="soilCard">
+        <div class="label">Toprak Nemi</div>
+        <div class="value"><span id="soilPct">–</span><small>%</small></div>
+        <div class="bar"><div id="soilBar" class="fill"></div></div>
+        <div class="hint" id="soilHint"></div>
+      </div>
+
+      <div class="card">
+        <div class="label">Sıcaklık</div>
+        <div class="value"><span id="temp">–</span><small>°C</small></div>
+      </div>
+      <div class="card">
+        <div class="label">Hava Nemi</div>
+        <div class="value"><span id="humAir">–</span><small>%</small></div>
+      </div>
+      <div class="card">
+        <div class="label">Işık</div>
+        <div class="value"><span id="light">–</span><small>%</small></div>
+      </div>
+      <div class="card">
+        <div class="label">Pompa</div>
+        <div class="value"><span id="pump">–</span></div>
+      </div>
+    </section>
+
+    <section class="controls">
+      <button id="btnWater" class="primary">💧 Şimdi Sula</button>
+      <button id="btnWater10">💧 10 sn</button>
+      <button id="btnStop" class="stop">⏹ Durdur</button>
+    </section>
+
+    <section class="controls">
+      <label class="toggle">
+        <input type="checkbox" id="autoToggle">
+        <span>Otomatik sulama</span>
+      </label>
+      <span class="updated">Son veri: <span id="updated">—</span></span>
+    </section>
+
+    <footer>
+      <details>
+        <summary>Ayarlar</summary>
+        <p>Cihaz ID'sini <code>app.js</code> içindeki <code>DEVICE_ID</code> ile aynı yap.
+           Şu an: <code id="curId"></code></p>
+      </details>
+    </footer>
+  </main>
+
+  <!-- MQTT over WebSocket istemcisi -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
