@@ -32,6 +32,10 @@ logger = logging.getLogger("liman_botu.medya")
 
 # main.py otomatik yükleyici bunları okur.
 KOMUTLAR = ["izledim", "okudum"]   # komutlar
+KOMUT_ACIKLAMA = {
+    "izledim": "Dizi/film/anime kaydet",
+    "okudum": "Manga kaydet",
+}
 CALLBACK_AD = "medya"              # butonlardan gelen callback'lerin ön eki
 
 # Aynı anda gösterilecek en fazla aday sayısı (buton kalabalığı olmasın).

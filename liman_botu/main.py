@@ -33,7 +33,7 @@ import importlib
 import logging
 import pkgutil
 
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -73,6 +73,7 @@ def moduller_yukle() -> tuple[dict, dict, list]:
     komut_tablosu: dict = {}
     callback_tablosu: dict = {}
     setup_hooklari: list = []
+    aciklamalar: dict = {}   # {komut: "menüde görünecek açıklama"}
 
     def _komut_ekle(komut, fn, ad):
         if komut in komut_tablosu:
@@ -107,6 +108,11 @@ def moduller_yukle() -> tuple[dict, dict, list]:
                 if callable(fn):
                     _komut_ekle(komut, fn, ad)
 
+        # --- Menü açıklamaları (opsiyonel): KOMUT_ACIKLAMA = {komut: "açıklama"} ---
+        modul_aciklama = getattr(modul, "KOMUT_ACIKLAMA", None)
+        if isinstance(modul_aciklama, dict):
+            aciklamalar.update(modul_aciklama)
+
         # --- Callback (buton) ---
         callback_ad = getattr(modul, "CALLBACK_AD", None)
         callback_fn = getattr(modul, "callback", None)
@@ -120,7 +126,7 @@ def moduller_yukle() -> tuple[dict, dict, list]:
             setup_hooklari.append(setup_fn)
             logger.info("Setup hook bulundu: %s", ad)
 
-    return komut_tablosu, callback_tablosu, setup_hooklari
+    return komut_tablosu, callback_tablosu, setup_hooklari, aciklamalar
 
 
 # ----------------------------------------------------------------------------
@@ -184,7 +190,7 @@ def _start_handler(komut_tablosu: dict):
 def main() -> None:
     config.dogrula()
 
-    komut_tablosu, callback_tablosu, setup_hooklari = moduller_yukle()
+    komut_tablosu, callback_tablosu, setup_hooklari, aciklamalar = moduller_yukle()
 
     app = Application.builder().token(config.TELEGRAM_TOKEN).build()
 
@@ -199,15 +205,23 @@ def main() -> None:
     if callback_tablosu:
         app.add_handler(CallbackQueryHandler(_callback_yonlendirici(callback_tablosu)))
 
-    # Modüllerin setup hook'ları (zamanlanmış görevler vb.) bot başlarken çalışsın.
-    if setup_hooklari:
-        async def _post_init(application):
-            for setup_fn in setup_hooklari:
-                try:
-                    await setup_fn(application)
-                except Exception:  # noqa: BLE001 — bir modül patlasa bot ayakta kalsın
-                    logger.exception("Setup hook hatası")
-        app.post_init = _post_init
+    # Bot başlarken: (1) Telegram komut menüsünü TÜM modüllerden topla,
+    #                (2) modüllerin setup hook'larını (zamanlanmış görevler) çalıştır.
+    async def _post_init(application):
+        # Telegram'da "/" yazınca çıkan menü — keşfedilen her komut burada.
+        komut_menusu = [
+            BotCommand(k, aciklamalar.get(k, k)) for k in sorted(komut_tablosu)
+        ]
+        try:
+            await application.bot.set_my_commands(komut_menusu)
+        except Exception:  # noqa: BLE001
+            logger.exception("Komut menüsü ayarlanamadı")
+        for setup_fn in setup_hooklari:
+            try:
+                await setup_fn(application)
+            except Exception:  # noqa: BLE001 — bir modül patlasa bot ayakta kalsın
+                logger.exception("Setup hook hatası")
+    app.post_init = _post_init
 
     logger.info(
         "Bot başlıyor... Komutlar: %s | Callback'ler: %s",

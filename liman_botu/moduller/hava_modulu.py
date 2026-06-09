@@ -20,7 +20,11 @@ from telegram.ext import ContextTypes
 
 logger = logging.getLogger("liman_botu.hava")
 
-KOMUTLAR = ["havadurumu"]
+KOMUTLAR = ["hava", "havadurumu"]   # ikisi de çalışır
+KOMUT_ACIKLAMA = {
+    "hava": "24 saatlik hava tahmini",
+    "havadurumu": "24 saatlik hava tahmini",
+}
 
 # WMO hava kodları -> emoji (Open-Meteo bu kodları döndürür).
 _KOD_EMOJI = {
@@ -35,23 +39,53 @@ _KOD_EMOJI = {
 }
 
 
+def _konum_alanlari(s: dict) -> str:
+    """Bir geocoding sonucunun tüm yer alanlarını tek metinde birleştirir."""
+    return " ".join(
+        str(s.get(k) or "")
+        for k in ("name", "admin1", "admin2", "admin3", "admin4", "country")
+    ).lower()
+
+
 def _konum_bul(sorgu: str) -> dict | None:
-    """Yer adından koordinat bulur. 'Barbaros Tekirdağ' -> tam, olmazsa ilk kelime."""
-    adaylar = [sorgu] + sorgu.split()  # önce tamı, sonra tek tek kelimeleri dene
-    for ad in adaylar:
-        r = requests.get(
-            "https://geocoding-api.open-meteo.com/v1/search",
-            params={"name": ad, "count": 1, "language": "tr"},
-            timeout=15,
-        )
-        if not r.ok:
+    """Yer adından koordinat bulur ve EN İYİ eşleşmeyi seçer.
+
+    'Barbaros Tekirdağ' gibi çok kelimeli aramalarda, her kelimeyle ayrı arama
+    yapıp dönen adayları PUANLAR: bir adayın il/ilçe/isim alanlarında sorgunun
+    kaç kelimesi geçiyorsa o kadar puan. Böylece 'barbaros' birçok yerde olsa da
+    'tekirdağ' da eşleşen aday (Tekirdağ'daki Barbaros) kazanır.
+    """
+    kelimeler = [k for k in sorgu.lower().split() if k]
+    en_iyi, en_iyi_skor = None, -1
+
+    # Önce tüm sorguyu, sonra her kelimeyi ayrı ayrı arama tohumu olarak dene.
+    for tohum in [sorgu] + kelimeler:
+        try:
+            r = requests.get(
+                "https://geocoding-api.open-meteo.com/v1/search",
+                params={"name": tohum, "count": 10, "language": "tr"},
+                timeout=15,
+            )
+            if not r.ok:
+                continue
+            sonuclar = r.json().get("results") or []
+        except Exception:
             continue
-        sonuclar = r.json().get("results") or []
-        if sonuclar:
-            s = sonuclar[0]
-            isim = ", ".join(x for x in [s.get("name"), s.get("admin1")] if x)
-            return {"lat": s["latitude"], "lon": s["longitude"], "isim": isim}
-    return None
+
+        for s in sonuclar:
+            alan = _konum_alanlari(s)
+            skor = sum(1 for k in kelimeler if k in alan)
+            if skor > en_iyi_skor:
+                en_iyi, en_iyi_skor = s, skor
+
+        # Sorgunun tüm kelimeleri eşleşti -> daha iyisini aramaya gerek yok.
+        if en_iyi_skor >= len(kelimeler):
+            break
+
+    if not en_iyi:
+        return None
+    isim = ", ".join(x for x in [en_iyi.get("name"), en_iyi.get("admin1")] if x)
+    return {"lat": en_iyi["latitude"], "lon": en_iyi["longitude"], "isim": isim}
 
 
 def _tahmin(lat: float, lon: float) -> list[dict]:

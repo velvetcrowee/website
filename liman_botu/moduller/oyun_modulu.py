@@ -23,6 +23,7 @@ from servisler import gemini, obsidian
 logger = logging.getLogger("liman_botu.oyun")
 
 KOMUTLAR = ["oynadim"]
+KOMUT_ACIKLAMA = {"oynadim": "Oyun kaydet (RAWG)"}
 CALLBACK_AD = "oyun"
 _MAX_ADAY = 6
 

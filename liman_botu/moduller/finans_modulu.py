@@ -23,6 +23,7 @@ from servisler import gemini, obsidian
 logger = logging.getLogger("liman_botu.finans")
 
 KOMUTLAR = ["harcama"]
+KOMUT_ACIKLAMA = {"harcama": "Harcama ekle (kategorize eder)"}
 
 _PARSE_PROMPT = """Aşağıdaki harcama cümlesini ayrıştır. SADECE geçerli JSON döndür.
 Şema:

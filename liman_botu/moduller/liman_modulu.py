@@ -22,7 +22,7 @@ from datetime import date, datetime, time as dtime, timedelta
 from io import BytesIO
 from zoneinfo import ZoneInfo
 
-from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, ContextTypes
 
 import config
@@ -684,40 +684,41 @@ KOMUT_HANDLERS = {
     "gemi_sil":     cmd_gemi_sil,
 }
 
+# Telegram'da "/" yazınca çıkacak menü açıklamaları (main.py topluyor).
+KOMUT_ACIKLAMA = {
+    "kimlik":       "Chat ID'ni göster",
+    "yardim":       "Liman komut listesi",
+    "vardiya_ekle": "Vardiya günü ekle",
+    "vardiyalar":   "Yaklaşan vardiyalar",
+    "vardiya_sil":  "Vardiya günü sil",
+    "kontrol":      "Raporu şimdi göster",
+    "rapor":        "Gün + vardiya sorgula",
+    "liste":        "N gün boyu tüm gemiler",
+    "gemi":         "Tek gemi detayı",
+    "rihtim":       "Rıhtımdaki gemiler",
+    "simdi":        "Şu an limanda",
+    "degisiklik":   "Değişiklikleri göster",
+    "menu":         "Dokunmatik menü",
+    "cizelge":      "Rıhtım çizelgesi (görsel)",
+    "prefetch":     "Yarınki veriyi çek",
+    "gemi_ekle":    "Manuel gemi ekle",
+    "gemiler":      "Manuel gemiler",
+    "gemi_sil":     "Manuel gemi sil",
+}
+
 
 async def setup(app: Application) -> None:
-    """Bot başlarken çağrılır: 07:30 sabah raporu + 18:00 prefetch job'ları kurulur,
-    Telegram komut menüsü ayarlanır."""
+    """Bot başlarken çağrılır: 07:30 sabah raporu + 18:00 prefetch job'larını kurar.
+    (Komut menüsünü artık main.py tüm modüllerden toplayıp ayarlıyor.)"""
     jq = app.job_queue
     if jq is None:
         log.warning("job_queue yok; zamanlanmış görevler kurulamadı "
                     "(pip install \"python-telegram-bot[job-queue]\").")
-    else:
-        jq.run_daily(job_morning_report,
-                     time=dtime(config.NOTIFY_HOUR, config.NOTIFY_MINUTE, tzinfo=TZ),
-                     name="morning_report")
-        jq.run_daily(job_prefetch,
-                     time=dtime(config.PREFETCH_HOUR, config.PREFETCH_MINUTE, tzinfo=TZ),
-                     name="prefetch")
-        log.info("Liman görevleri kuruldu: 07:30 rapor + 18:00 pre-fetch.")
-
-    await app.bot.set_my_commands([
-        BotCommand("kimlik",       "Chat ID'ni göster"),
-        BotCommand("yardim",       "Komut listesi"),
-        BotCommand("vardiya_ekle", "Vardiya günü ekle"),
-        BotCommand("vardiyalar",   "Yaklaşan vardiyalar"),
-        BotCommand("vardiya_sil",  "Vardiya günü sil"),
-        BotCommand("kontrol",      "Raporu şimdi göster"),
-        BotCommand("rapor",        "Gün + vardiya sorgula"),
-        BotCommand("liste",        "N gün boyu tüm gemiler"),
-        BotCommand("gemi",         "Tek gemi detayı"),
-        BotCommand("rihtim",       "Rıhtımdaki gemiler"),
-        BotCommand("simdi",        "Şu an limanda"),
-        BotCommand("degisiklik",   "Değişiklikleri göster"),
-        BotCommand("menu",         "Dokunmatik menü"),
-        BotCommand("cizelge",      "Rıhtım çizelgesi (görsel)"),
-        BotCommand("prefetch",     "Yarınki veriyi çek"),
-        BotCommand("gemi_ekle",    "Manuel gemi ekle"),
-        BotCommand("gemiler",      "Manuel gemiler"),
-        BotCommand("gemi_sil",     "Manuel gemi sil"),
-    ])
+        return
+    jq.run_daily(job_morning_report,
+                 time=dtime(config.NOTIFY_HOUR, config.NOTIFY_MINUTE, tzinfo=TZ),
+                 name="morning_report")
+    jq.run_daily(job_prefetch,
+                 time=dtime(config.PREFETCH_HOUR, config.PREFETCH_MINUTE, tzinfo=TZ),
+                 name="prefetch")
+    log.info("Liman görevleri kuruldu: 07:30 rapor + 18:00 pre-fetch.")

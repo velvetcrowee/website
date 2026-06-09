@@ -22,6 +22,7 @@ from servisler import obsidian
 logger = logging.getLogger("liman_botu.liste")
 
 KOMUTLAR = ["listem"]
+KOMUT_ACIKLAMA = {"listem": "Medya listeni göster (tür/puan filtreli)"}
 
 _TUR_EMOJI = {"anime": "🍙", "dizi": "📺", "film": "🎬", "manga": "📚"}
 _GECERLI_TURLER = set(_TUR_EMOJI)
