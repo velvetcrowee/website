@@ -136,10 +136,21 @@
 				<button id="btn-save-goal" class="btn primary full">Kaydet</button>
 			</div>
 			<div class="card">
-				<h2>Yapay Zekâ (Claude API)</h2>
-				<p class="muted">Yemek fotoğrafı analizi ve program önerileri için bir Anthropic API anahtarı gerekir. Anahtar yalnızca bu cihazda saklanır. <a href="https://platform.claude.com/" target="_blank" rel="noopener">console üzerinden alabilirsiniz</a>.</p>
-				<input type="password" id="api-key-input" placeholder="sk-ant-...">
-				<button id="btn-save-key" class="btn primary full">Anahtarı Kaydet</button>
+				<h2>Yapay Zekâ</h2>
+				<p class="muted">Yemek fotoğrafı analizi ve program önerileri için bir API anahtarı gerekir. Anahtarlar yalnızca bu cihazda saklanır; sağlayıcıyı dilediğiniz zaman değiştirebilirsiniz.</p>
+				<select id="ai-provider">
+					<option value="gemini">Gemini (Google) — ücretsiz anahtar</option>
+					<option value="claude">Claude (Anthropic)</option>
+				</select>
+				<div id="gemini-key-row">
+					<input type="password" id="gemini-key-input" placeholder="Gemini anahtarı (AIza...)">
+					<p class="muted">Ücretsiz anahtar: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></p>
+				</div>
+				<div id="claude-key-row" hidden>
+					<input type="password" id="api-key-input" placeholder="Claude anahtarı (sk-ant-...)">
+					<p class="muted">Anahtar: <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a></p>
+				</div>
+				<button id="btn-save-key" class="btn primary full">Kaydet</button>
 				<p id="key-status" class="muted"></p>
 			</div>
 			<div class="card">

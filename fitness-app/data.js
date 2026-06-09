@@ -20,7 +20,8 @@ const DB = {
 const Store = {
 	get settings() {
 		return DB.read("settings", {
-			goal: "fatloss-muscle", targetWeight: null, apiKey: "",
+			goal: "fatloss-muscle", targetWeight: null,
+			aiProvider: "gemini", apiKey: "", geminiKey: "",
 			age: null, height: null, gender: "m",
 		});
 	},

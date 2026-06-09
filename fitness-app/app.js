@@ -243,7 +243,7 @@ $("#rest-close").addEventListener("click", () => {
 
 $("#btn-generate-program").addEventListener("click", async () => {
 	const btn = $("#btn-generate-program");
-	if (!Store.settings.apiKey) {
+	if (!activeKey()) {
 		// Anahtar yoksa hedefe uygun hazır programı kur.
 		Store.program = DEFAULT_PROGRAM;
 		renderWorkout();
@@ -580,18 +580,29 @@ $("#btn-save-goal").addEventListener("click", () => {
 	toast("Profil kaydedildi ✓");
 });
 
+function syncProviderRows() {
+	const provider = $("#ai-provider").value;
+	$("#gemini-key-row").hidden = provider !== "gemini";
+	$("#claude-key-row").hidden = provider !== "claude";
+}
+
+$("#ai-provider").addEventListener("change", syncProviderRows);
+
 $("#btn-save-key").addEventListener("click", () => {
 	const s = Store.settings;
+	s.aiProvider = $("#ai-provider").value;
 	s.apiKey = $("#api-key-input").value.trim();
+	s.geminiKey = $("#gemini-key-input").value.trim();
 	Store.settings = s;
 	updateKeyStatus();
-	toast(s.apiKey ? "API anahtarı kaydedildi ✓" : "API anahtarı silindi.");
+	toast(activeKey() ? "Yapay zekâ ayarları kaydedildi ✓" : "Kaydedildi — seçili sağlayıcının anahtarı boş.");
 });
 
 function updateKeyStatus() {
-	$("#key-status").textContent = Store.settings.apiKey
-		? "✓ Anahtar kayıtlı — yapay zekâ özellikleri aktif."
-		: "Anahtar kayıtlı değil — yapay zekâ özellikleri kapalı.";
+	const provider = activeProvider() === "gemini" ? "Gemini" : "Claude";
+	$("#key-status").textContent = activeKey()
+		? `✓ ${provider} aktif — yapay zekâ özellikleri açık.`
+		: `${provider} seçili ama anahtar kayıtlı değil — yapay zekâ özellikleri kapalı.`;
 }
 
 $("#btn-export").addEventListener("click", () => {
@@ -645,7 +656,10 @@ function init() {
 	if (s.age) $("#profile-age").value = s.age;
 	if (s.height) $("#profile-height").value = s.height;
 	$("#profile-gender").value = s.gender || "m";
+	$("#ai-provider").value = s.aiProvider || "gemini";
 	if (s.apiKey) $("#api-key-input").value = s.apiKey;
+	if (s.geminiKey) $("#gemini-key-input").value = s.geminiKey;
+	syncProviderRows();
 	updateKeyStatus();
 
 	renderWorkout();

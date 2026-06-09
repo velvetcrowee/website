@@ -54,10 +54,16 @@ için HTTPS gereklidir; `localhost` da çalışır.)
 
 ## Yapay zekâ özellikleri
 
-Ayarlar sekmesine bir Anthropic API anahtarı (`sk-ant-...`) girin —
-<https://platform.claude.com/> üzerinden alabilirsiniz. Anahtar yalnızca
-cihazınızda saklanır ve istekler doğrudan tarayıcınızdan Claude API'ye gider
-(model: `claude-opus-4-8`). Anahtarsız da uygulamanın tüm kayıt/takip
+Ayarlar sekmesinden sağlayıcı seçin ve API anahtarını girin:
+
+- **Gemini (Google)** — `gemini-2.5-flash`. Ücretsiz anahtar:
+  <https://aistudio.google.com/apikey>
+- **Claude (Anthropic)** — `claude-opus-4-8`. Anahtar:
+  <https://platform.claude.com/>
+
+Anahtarlar yalnızca cihazınızda saklanır ve istekler doğrudan tarayıcınızdan
+ilgili API'ye gider. Sağlayıcıyı dilediğiniz zaman değiştirebilirsiniz; iki
+anahtar da kayıtlı kalır. Anahtarsız da uygulamanın tüm kayıt/takip
 özellikleri çalışır; yalnızca fotoğraf analizi ve yapay zekâ önerileri kapalı
 olur.
 
