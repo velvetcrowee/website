@@ -2,6 +2,18 @@
 
 Temiz, modüler bir mimari. `main.py` sadece yönlendirir; iş mantığı modüllerde durur.
 
+## Komutlar
+
+| Komut | Ne yapar | Örnek |
+|-------|----------|-------|
+| `/liman` | Vardiya / iş takibi | `/liman basla` |
+| `/izledim`, `/okudum` | Medya kaydı (çok eşleşmede "Hangisi?" sorar) | `/izledim xmen, puanım 7` |
+| `/listem` | Medya veritabanını filtreli listeler | `/listem anime 8` |
+| `/oynadim` | Oyun kaydı (RAWG + akıllı seçim) | `/oynadim Elden Ring 9 puan` |
+| `/harcama` | Harcama kaydı (Gemini kategorize) | `/harcama 150 market` |
+| `/havadurumu` | 24 saatlik emoji'li tahmin | `/havadurumu Barbaros Tekirdağ` |
+
+
 ```
 liman_botu/
 ├── main.py                  # Yönlendirici + otomatik modül yükleyici. İş mantığı yok.
@@ -10,7 +22,11 @@ liman_botu/
 │   ├── __init__.py
 │   ├── _sablon.py           # Yeni modül için kopyala-yapıştır şablonu (yüklenmez).
 │   ├── liman_modulu.py      # /liman — vardiya & iş takibi (sınıf tabanlı)
-│   └── medya_modulu.py      # /izledim, /okudum — akıllı seçim + TMDB/Jikan + servisler
+│   ├── medya_modulu.py      # /izledim, /okudum — akıllı seçim + TMDB/Jikan
+│   ├── liste_modulu.py      # /listem — medya veritabanını filtreli okur
+│   ├── finans_modulu.py     # /harcama — Gemini kategorize + aylık Dataview dosyası
+│   ├── oyun_modulu.py       # /oynadim — RAWG ile akıllı seçim
+│   └── hava_modulu.py       # /havadurumu — 24 saatlik emoji'li tahmin (Open-Meteo)
 ├── servisler/               # Paylaşımlı altyapı; modüller buradan import eder.
 │   ├── __init__.py
 │   ├── gemini.py            # Tek yerden Gemini: uret / json_uret / cevir

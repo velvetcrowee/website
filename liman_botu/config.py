@@ -24,9 +24,13 @@ ALLOWED_USER_IDS = {
 # --- API Anahtarları ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")
+RAWG_API_KEY = os.getenv("RAWG_API_KEY", "")  # oyunlar için (rawg.io, ücretsiz)
+# Hava durumu Open-Meteo ile çalışır; ANAHTAR GEREKTİRMEZ.
 
-# --- Obsidian ---
+# --- Obsidian klasörleri (her modül kendi alt klasörüne yazar) ---
 OBSIDIAN_MEDYA_PATH = os.getenv("OBSIDIAN_MEDYA_PATH", "./vault/Medya")
+OBSIDIAN_OYUN_PATH = os.getenv("OBSIDIAN_OYUN_PATH", "./vault/Oyunlar")
+OBSIDIAN_FINANS_PATH = os.getenv("OBSIDIAN_FINANS_PATH", "./vault/Finans")
 
 # Gemini için kullanılacak model (kotayı korumak adına hızlı/ucuz olanı).
 GEMINI_MODEL = "gemini-1.5-flash"

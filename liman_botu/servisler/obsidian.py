@@ -107,6 +107,51 @@ def kaydet(
     return f"✅ Oluşturuldu: {baslik}"
 
 
+def _yaml_coz(deger: str):
+    """YAML değerini Python'a çevirir (tırnak/sayı/liste için basit ayrıştırma)."""
+    deger = deger.strip()
+    if deger.startswith("[") and deger.endswith("]"):
+        return [x.strip().strip('"') for x in deger[1:-1].split(",") if x.strip()]
+    if deger.startswith('"') and deger.endswith('"'):
+        return deger[1:-1]
+    if deger.lstrip("-").isdigit():
+        return int(deger)
+    return deger
+
+
+def frontmatter_oku(yol: str) -> dict:
+    """Bir .md dosyasının YAML frontmatter'ını sözlüğe çevirir."""
+    with open(yol, "r", encoding="utf-8") as f:
+        icerik = f.read()
+    if not icerik.startswith("---"):
+        return {}
+    son = icerik.find("\n---", 3)
+    if son == -1:
+        return {}
+    alanlar = {}
+    for satir in icerik[3:son].strip().splitlines():
+        if ":" in satir:
+            anahtar, _, ham = satir.partition(":")
+            alanlar[anahtar.strip()] = _yaml_coz(ham)
+    return alanlar
+
+
+def notlari_listele(klasor: str) -> list[dict]:
+    """Klasördeki tüm notların frontmatter'larını liste olarak döndürür.
+
+    /listem gibi "veritabanını geri okuyan" komutlar için. Klasör yoksa boş döner.
+    """
+    if not os.path.isdir(klasor):
+        return []
+    sonuc = []
+    for ad in os.listdir(klasor):
+        if ad.endswith(".md"):
+            fm = frontmatter_oku(os.path.join(klasor, ad))
+            if fm:
+                sonuc.append(fm)
+    return sonuc
+
+
 def gunluk_nota_ekle(klasor: str, satir: str) -> str:
     """Bugünün günlük notuna (YYYY-MM-DD.md) bir madde ekler.
 
