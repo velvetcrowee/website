@@ -10,7 +10,11 @@ liman_botu/
 │   ├── __init__.py
 │   ├── _sablon.py           # Yeni modül için kopyala-yapıştır şablonu (yüklenmez).
 │   ├── liman_modulu.py      # /liman — vardiya & iş takibi (sınıf tabanlı)
-│   └── medya_modulu.py      # /izledim, /okudum — Gemini + TMDB/Jikan + Obsidian
+│   └── medya_modulu.py      # /izledim, /okudum — TMDB/Jikan + servisler
+├── servisler/               # Paylaşımlı altyapı; modüller buradan import eder.
+│   ├── __init__.py
+│   ├── gemini.py            # Tek yerden Gemini: uret / json_uret / cevir
+│   └── obsidian.py          # Not yazıcısı: kaydet / gunluk_nota_ekle
 ├── requirements.txt
 └── .env.example             # Kopyala -> .env yap, anahtarları doldur
 ```
@@ -47,6 +51,27 @@ cp moduller/_sablon.py moduller/akilli_ev_modulu.py
 
 Sonra içindeki `KOMUTLAR` ve `handle`'ı doldur, botu yeniden başlat. `/ev` komutu
 otomatik aktif olur — **`main.py`'ye hiç dokunmazsın.**
+
+## Paylaşımlı servisler (`servisler/`)
+
+Tekrar eden altyapı işleri burada toplanır; modüller bunları import edip kullanır.
+Böylece her modül kendi Gemini/dosya kodunu yazmaz, kod tekrarı olmaz.
+
+```python
+from servisler import gemini, obsidian
+
+veri  = gemini.json_uret(prompt)          # Gemini'den JSON al
+ozet  = gemini.cevir(ingilizce_metin)     # Türkçeye çevir
+durum = obsidian.kaydet(                   # not oluştur / kısmi güncelle
+    klasor, baslik, frontmatter, govde,
+    guncellenebilir_alanlar=["rating"],
+)
+obsidian.gunluk_nota_ekle(klasor, "satır") # günlük nota madde ekle
+```
+
+Gemini tek yerden (tembel singleton) yapılandırılır; modüllerde `genai.configure`
+tekrarı yoktur. Yeni bir paylaşımlı bağımlılık (örn. Spotify, Google Sheets)
+gerektiğinde `servisler/` altına yeni bir dosya açman yeterli.
 
 ## API kotası koruması
 

@@ -18,6 +18,10 @@ from telegram.ext import ContextTypes
 
 import config  # gerekirse ayarlara/anahtarlara buradan eriş
 
+# Paylaşımlı servisler (gerekmiyorsa silebilirsin):
+#   from servisler import gemini    # gemini.uret(...) / gemini.json_uret(...) / gemini.cevir(...)
+#   from servisler import obsidian  # obsidian.kaydet(...) / obsidian.gunluk_nota_ekle(...)
+
 logger = logging.getLogger("liman_botu.sablon")
 
 # Bu modülün sahiplendiği komut(lar). Birden fazla olabilir.
