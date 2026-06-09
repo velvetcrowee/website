@@ -5,6 +5,35 @@
 
 ---
 
+## 0. Mevcut Asya Port kodunu taşı (ÖNEMLİ)
+
+Senin çalışan liman botun (`scraper.py`, `formatter.py`, `chart.py`,
+`amf_client.py`, `shift_manager.py`, `shifts.json`) artık yeni modüler botun
+**liman modülü** olarak çalışıyor. Bu dosyaları `liman_botu/` klasörünün
+**içine** kopyala:
+
+```
+liman_botu/
+├── main.py            (yeni)
+├── config.py          (yeni — eski config.py'nin yerine, ikisi birleştirildi)
+├── scraper.py         ← senin dosyan, buraya kopyala
+├── formatter.py       ← senin dosyan, buraya kopyala
+├── chart.py           ← senin dosyan, buraya kopyala
+├── amf_client.py      ← senin dosyan, buraya kopyala
+├── shift_manager.py   ← senin dosyan, buraya kopyala
+├── shifts.json        ← senin dosyan, buraya kopyala
+├── moduller/
+│   └── liman_modulu.py  (yeni — eski bot.py'nin işini yapıyor)
+└── servisler/
+```
+
+> **Eski `bot.py` ve eski `config.py`'yi KOPYALAMA.** Onların işini artık
+> `main.py` + `moduller/liman_modulu.py` + yeni `config.py` yapıyor.
+> Eski `config.py`'deki tüm ayarlar (port URL, vardiya saatleri, timezone)
+> yeni `config.py`'ye taşındı.
+
+---
+
 ## 1. Python'u kur
 
 - [python.org/downloads](https://www.python.org/downloads/) adresinden **Python 3.10+** indir.
@@ -71,8 +100,8 @@ cp .env.example .env
 
 Sonra `.env` dosyasını bir metin editörüyle aç ve doldur:
 ```ini
-TELEGRAM_TOKEN=BotFather'dan aldığın token
-ALLOWED_USER_IDS=senin Telegram ID'in
+TELEGRAM_BOT_TOKEN=BotFather'dan aldığın token
+TELEGRAM_CHAT_ID=senin Telegram ID'in
 GEMINI_API_KEY=...
 TMDB_API_KEY=...
 RAWG_API_KEY=...
@@ -83,7 +112,10 @@ OBSIDIAN_OYUN_PATH=C:/Users/SENIN_ADIN/Obsidian/Vault/Oyunlar
 OBSIDIAN_FINANS_PATH=C:/Users/SENIN_ADIN/Obsidian/Vault/Finans
 ```
 
-> Windows yollarında ters slash yerine **düz slash** (`/`) kullan, en kolayı budur.
+> Eski botun `.env`'i zaten `TELEGRAM_BOT_TOKEN` ve `TELEGRAM_CHAT_ID`
+> kullanıyordu — aynen geçerli, yeni isim aramana gerek yok.
+> Windows yollarında ters slash yerine **düz slash** (`/`) kullan.
+> `TELEGRAM_CHAT_ID`'yi bilmiyorsan: botu çalıştır, Telegram'da **/kimlik** yaz.
 
 ## 6. Botu çalıştır
 

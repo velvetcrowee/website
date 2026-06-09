@@ -6,7 +6,7 @@ Temiz, modüler bir mimari. `main.py` sadece yönlendirir; iş mantığı modül
 
 | Komut | Ne yapar | Örnek |
 |-------|----------|-------|
-| `/liman` | Vardiya / iş takibi | `/liman basla` |
+| `/rapor`, `/kontrol`, `/gemi`, `/rihtim`, `/simdi`, `/menu`, `/cizelge`, `/vardiya_ekle` … | Asya Port liman botu (18 komut + 07:30 otomatik rapor) | `/rapor yarin 8 4` |
 | `/izledim`, `/okudum` | Medya kaydı (çok eşleşmede "Hangisi?" sorar) | `/izledim xmen, puanım 7` |
 | `/listem` | Medya veritabanını filtreli listeler | `/listem anime 8` |
 | `/oynadim` | Oyun kaydı (RAWG + akıllı seçim) | `/oynadim Elden Ring 9 puan` |
@@ -21,7 +21,7 @@ liman_botu/
 ├── moduller/                # Tüm özellik modülleri burada; main.py bunu tarar.
 │   ├── __init__.py
 │   ├── _sablon.py           # Yeni modül için kopyala-yapıştır şablonu (yüklenmez).
-│   ├── liman_modulu.py      # /liman — vardiya & iş takibi (sınıf tabanlı)
+│   ├── liman_modulu.py      # Asya Port botu (18 komut, scraper/formatter/chart'ı kullanır)
 │   ├── medya_modulu.py      # /izledim, /okudum — akıllı seçim + TMDB/Jikan
 │   ├── liste_modulu.py      # /listem — medya veritabanını filtreli okur
 │   ├── finans_modulu.py     # /harcama — Gemini kategorize + aylık Dataview dosyası

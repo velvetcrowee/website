@@ -1,5 +1,14 @@
-python-telegram-bot>=20.0
+# Telegram (job-queue: zamanlanmış 07:30 rapor / 18:00 prefetch için)
+python-telegram-bot[job-queue]>=20.0
+
+# Yapay zeka + medya/oyun modülleri
 google-generativeai>=0.5.0
 requests>=2.31.0
 python-dotenv>=1.0.0
 PyYAML>=6.0
+
+# Liman çizelgesi (/cizelge) — opsiyonel; yoksa çizelge sessizce kapanır
+matplotlib>=3.5
+
+# Windows'ta ZoneInfo("Europe/Istanbul") için zaman dilimi verisi
+tzdata>=2024.1

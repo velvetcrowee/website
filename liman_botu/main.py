@@ -57,41 +57,55 @@ logger = logging.getLogger("liman_botu")
 # ----------------------------------------------------------------------------
 # OTOMATİK MODÜL KEŞFİ
 # ----------------------------------------------------------------------------
-def moduller_yukle() -> tuple[dict, dict]:
-    """`moduller/` paketini tarar; komut ve callback tablolarını inşa eder.
+def moduller_yukle() -> tuple[dict, dict, list]:
+    """`moduller/` paketini tarar; komut, callback ve setup hook'larını toplar.
 
-    Komut için iki şart: modülde `KOMUTLAR` listesi + `handle` fonksiyonu.
-    Callback (buton) için iki şart: `CALLBACK_AD` + `callback` fonksiyonu (opsiyonel).
+    Bir modül şunları (hepsi opsiyonel) ilan edebilir:
+      * KOMUTLAR = ["x"] + handle        -> hepsi tek handle'a gider (basit modül)
+      * KOMUT_HANDLERS = {"x": fn, ...}  -> her komut kendi fonksiyonuna gider
+                                            (çok komutlu modüller için, örn. liman)
+      * CALLBACK_AD + callback           -> "ad:..." ile başlayan buton tıklamaları
+      * async def setup(app)             -> zamanlanmış görev/menü kurulumu
 
     Returns:
-        (komut_tablosu, callback_tablosu)
-          komut_tablosu:    {komut_adi: handle_fn}
-          callback_tablosu: {callback_ad: callback_fn}
+        (komut_tablosu, callback_tablosu, setup_hooklari)
     """
     komut_tablosu: dict = {}
     callback_tablosu: dict = {}
+    setup_hooklari: list = []
+
+    def _komut_ekle(komut, fn, ad):
+        if komut in komut_tablosu:
+            logger.warning(
+                "Komut çakışması: /%s zaten kayıtlı, '%s' modülü eziyor.", komut, ad,
+            )
+        komut_tablosu[komut] = fn
+        logger.info("Kaydedildi: /%s -> %s", komut, ad)
 
     for modul_bilgi in pkgutil.iter_modules(moduller.__path__):
         ad = modul_bilgi.name
         if ad.startswith("_"):
             continue  # __init__ vb. atla
 
-        modul = importlib.import_module(f"moduller.{ad}")
+        try:
+            modul = importlib.import_module(f"moduller.{ad}")
+        except Exception:  # noqa: BLE001 — bir modülün eksik bağımlılığı diğerlerini batırmasın
+            logger.exception("Modül yüklenemedi, atlanıyor: %s", ad)
+            continue
 
-        # --- Komutlar ---
+        # --- Basit komutlar: KOMUTLAR + handle (hepsi tek handle'a) ---
         komutlar = getattr(modul, "KOMUTLAR", None)
         handler = getattr(modul, "handle", None)
         if komutlar and callable(handler):
             for komut in komutlar:
-                if komut in komut_tablosu:
-                    logger.warning(
-                        "Komut çakışması: /%s zaten kayıtlı, '%s' modülü eziyor.",
-                        komut, ad,
-                    )
-                komut_tablosu[komut] = handler
-                logger.info("Kaydedildi: /%s -> %s", komut, ad)
-        else:
-            logger.debug("Komut atlandı (KOMUTLAR/handle yok): %s", ad)
+                _komut_ekle(komut, handler, ad)
+
+        # --- Çok komutlu: KOMUT_HANDLERS = {komut: fonksiyon} ---
+        komut_handlers = getattr(modul, "KOMUT_HANDLERS", None)
+        if isinstance(komut_handlers, dict):
+            for komut, fn in komut_handlers.items():
+                if callable(fn):
+                    _komut_ekle(komut, fn, ad)
 
         # --- Callback (buton) ---
         callback_ad = getattr(modul, "CALLBACK_AD", None)
@@ -100,7 +114,13 @@ def moduller_yukle() -> tuple[dict, dict]:
             callback_tablosu[callback_ad] = callback_fn
             logger.info("Callback kaydedildi: %s: -> %s", callback_ad, ad)
 
-    return komut_tablosu, callback_tablosu
+        # --- Setup hook (zamanlanmış görev / menü kurulumu) ---
+        setup_fn = getattr(modul, "setup", None)
+        if callable(setup_fn):
+            setup_hooklari.append(setup_fn)
+            logger.info("Setup hook bulundu: %s", ad)
+
+    return komut_tablosu, callback_tablosu, setup_hooklari
 
 
 # ----------------------------------------------------------------------------
@@ -164,7 +184,7 @@ def _start_handler(komut_tablosu: dict):
 def main() -> None:
     config.dogrula()
 
-    komut_tablosu, callback_tablosu = moduller_yukle()
+    komut_tablosu, callback_tablosu, setup_hooklari = moduller_yukle()
 
     app = Application.builder().token(config.TELEGRAM_TOKEN).build()
 
@@ -178,6 +198,16 @@ def main() -> None:
     # Tüm buton tıklamaları tek yönlendiriciden geçer (callback_data ön ekine göre).
     if callback_tablosu:
         app.add_handler(CallbackQueryHandler(_callback_yonlendirici(callback_tablosu)))
+
+    # Modüllerin setup hook'ları (zamanlanmış görevler vb.) bot başlarken çalışsın.
+    if setup_hooklari:
+        async def _post_init(application):
+            for setup_fn in setup_hooklari:
+                try:
+                    await setup_fn(application)
+                except Exception:  # noqa: BLE001 — bir modül patlasa bot ayakta kalsın
+                    logger.exception("Setup hook hatası")
+        app.post_init = _post_init
 
     logger.info(
         "Bot başlıyor... Komutlar: %s | Callback'ler: %s",
