@@ -148,7 +148,17 @@ def _yetki_sarmalayici(handler):
         if not _izinli_mi(update):
             await update.message.reply_text("Bu botu kullanma yetkin yok. 🚫")
             return
-        await handler(update, context)
+        try:
+            await handler(update, context)
+        except Exception as exc:  # noqa: BLE001 — sessiz kalma; kullanıcıya bildir
+            logger.exception("Komut hatası")
+            try:
+                await update.message.reply_text(
+                    f"⚠️ İşlem başarısız: {exc}\n"
+                    "(Liman komutları için liman ağında olman gerekebilir.)"
+                )
+            except Exception:  # noqa: BLE001
+                pass
 
     return sarmalanmis
 
