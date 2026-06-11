@@ -19,17 +19,26 @@ const DB = {
 
 const Store = {
 	get settings() {
-		return DB.read("settings", { aiProvider: "gemini", apiKey: "", geminiKey: "" });
+		return DB.read("settings", { aiProvider: "gemini", apiKey: "", geminiKey: "", sound: true });
 	},
 	set settings(v) { DB.write("settings", v); },
 
-	// Keşfedilen elementler: { "buhar": { name, emoji, discoveredAt, firstDiscovery, fromPair } }
+	// Keşfedilen elementler: { "buhar": { name, emoji, desc, discoveredAt, firstDiscovery, fromPair } }
 	get elements() { return DB.read("elements", {}); },
 	set elements(v) { DB.write("elements", v); },
 
-	// Yapay zekâ tarif önbelleği: { "ateş++su": { name, emoji, isNew } }
+	// Yapay zekâ tarif önbelleği: { "ateş++su": { name, emoji, isNew, desc } }
 	get recipes() { return DB.read("recipes", {}); },
 	set recipes(v) { DB.write("recipes", v); },
+
+	// Oyun belleği: her birleştirme olayı kronolojik kaydedilir (en fazla 1000).
+	// [{ at, pair: [a, b], result, isNew, discovered, source: "seed"|"cache"|"ai"|"mock" }]
+	get memory() { return DB.read("memory", []); },
+	set memory(v) { DB.write("memory", v); },
+
+	// Kazanılan rozetler: { rozetId: kazanılmaTarihiISO }
+	get badges() { return DB.read("badges", {}); },
+	set badges(v) { DB.write("badges", v); },
 
 	get stats() { return DB.read("stats", { combos: 0, discoveries: 0, aiCalls: 0 }); },
 	set stats(v) { DB.write("stats", v); },

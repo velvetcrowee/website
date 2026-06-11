@@ -235,7 +235,7 @@ input:focus, select:focus { outline: 2px solid var(--accent-dark); }
 
 .stats-row {
 	display: grid;
-	grid-template-columns: repeat(3, 1fr);
+	grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
 	gap: 8px;
 	margin-bottom: 12px;
 }
@@ -247,6 +247,38 @@ input:focus, select:focus { outline: 2px solid var(--accent-dark); }
 }
 .stat b { display: block; font-size: 1.2rem; color: var(--accent); }
 .stat span { font-size: 0.72rem; color: var(--muted); }
+
+#badge-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+	gap: 8px;
+	margin-bottom: 12px;
+}
+.badge-card {
+	background: var(--card-2);
+	border-radius: 10px;
+	padding: 10px;
+	text-align: center;
+	font-size: 0.78rem;
+}
+.badge-card .b-emoji { font-size: 1.4rem; display: block; }
+.badge-card .b-name { font-weight: 600; display: block; margin: 4px 0 2px; }
+.badge-card .b-goal { color: var(--muted); font-size: 0.7rem; }
+.badge-card.locked { opacity: 0.35; filter: grayscale(1); }
+.badge-card.earned { outline: 1px solid var(--gold); }
+
+.check-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.95rem;
+	margin-bottom: 10px;
+	cursor: pointer;
+}
+.check-row input { width: auto; margin: 0; }
+
+#book-list li, #detail-lineage li { cursor: pointer; }
+#detail-title { font-size: 1.4rem; }
 
 .item-list { list-style: none; }
 .item-list li {

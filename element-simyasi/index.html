@@ -45,7 +45,25 @@
 				<button class="del modal-close">✕</button>
 			</div>
 			<div id="book-stats" class="stats-row"></div>
+			<h3>🎖️ Rozetler</h3>
+			<div id="badge-grid"></div>
+			<h3>🧭 Keşifler</h3>
+			<p class="muted">Bir elemente dokunarak hikâyesini ve soy ağacını görebilirsiniz.</p>
 			<ul id="book-list" class="item-list"></ul>
+		</div>
+	</div>
+
+	<!-- Element detayı: hikâye ve soy ağacı -->
+	<div id="modal-detail" class="modal" hidden>
+		<div class="modal-card">
+			<div class="row-between">
+				<h2 id="detail-title"></h2>
+				<button class="del modal-close">✕</button>
+			</div>
+			<p id="detail-desc" class="muted"></p>
+			<p id="detail-meta" class="muted"></p>
+			<h3>🌳 Soy Ağacı</h3>
+			<ul id="detail-lineage" class="item-list"></ul>
 		</div>
 	</div>
 
@@ -73,8 +91,13 @@
 			</div>
 			<button id="btn-save-key" class="btn primary full">Kaydet</button>
 			<p id="key-status" class="muted"></p>
-			<h3>Veriler</h3>
+			<h3>Oyun</h3>
+			<label class="check-row"><input type="checkbox" id="sound-toggle" checked> Ses efektleri</label>
+			<h3>Veriler & Oyun Belleği</h3>
+			<p id="memory-info" class="muted"></p>
 			<button id="btn-export" class="btn full">📤 Verileri dışa aktar (JSON)</button>
+			<button id="btn-export-train" class="btn full">🧠 Eğitim verisini dışa aktar (JSONL)</button>
+			<p class="muted">Eğitim verisi, oyunun öğrendiği tüm tarifleri yapay zekâ ince ayarına (fine-tuning) hazır sohbet biçiminde dışa aktarır.</p>
 			<button id="btn-reset" class="btn danger full">Tüm verileri sıfırla</button>
 		</div>
 	</div>

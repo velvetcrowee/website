@@ -14,6 +14,15 @@ elementler keşfedersiniz — Karadelik'e, Film'e ve ötesine kadar.
 - **Kalıcılık:** Keşfedilen her element, tarif önbelleği, istatistikler ve tuval
   durumu cihazda saklanır. Aynı ikili yapay zekâya yalnızca bir kez sorulur;
   A+B ile B+A aynı sonucu verir.
+- **Oyun belleği:** Her birleştirme olayı oyunun belleğine yazılır. Yapay zekâ
+  prompt'u bu bellekle beslenir: son keşifler ve oyuncunun kendi tarifleri
+  bağlama eklenir, keşif sayısı arttıkça yaratıcılık seviyesi yükselir — oyun
+  oynandıkça gelişir.
+- **Eğitim verisi:** Ayarlar'dan tüm öğrenilmiş + yerleşik tarifler, yapay zekâ
+  ince ayarına hazır JSONL (sohbet biçimi) olarak dışa aktarılabilir.
+- **Rozetler ve soy ağacı:** Kilometre taşları rozet kazandırır; Keşif
+  Defteri'nde her elementin hikâyesi (açıklama) ve temel elementlere kadar inen
+  soy ağacı görüntülenir. WebAudio ile dosyasız ses efektleri vardır.
 
 ## Geliştirme
 

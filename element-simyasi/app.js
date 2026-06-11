@@ -38,13 +38,49 @@ function confetti() {
 	}
 }
 
+/* ---------- Ses efektleri (WebAudio, dosyasız) ---------- */
+
+let audioCtx = null;
+
+function sfx(kind) {
+	if (Store.settings.sound === false) return;
+	try {
+		audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+		const tones = {
+			merge: [[392, 0.07], [523, 0.09]],
+			discover: [[523, 0.09], [659, 0.09], [784, 0.16]],
+			first: [[523, 0.1], [659, 0.1], [784, 0.1], [1047, 0.22]],
+			badge: [[659, 0.1], [880, 0.18]],
+			error: [[196, 0.18]],
+		}[kind] || [];
+		let at = audioCtx.currentTime;
+		tones.forEach(([f, d]) => {
+			const o = audioCtx.createOscillator();
+			const g = audioCtx.createGain();
+			o.type = "triangle";
+			o.frequency.value = f;
+			g.gain.setValueAtTime(0.12, at);
+			g.gain.exponentialRampToValueAtTime(0.001, at + d);
+			o.connect(g).connect(audioCtx.destination);
+			o.start(at);
+			o.stop(at + d + 0.02);
+			at += d * 0.85;
+		});
+	} catch { /* ses isteğe bağlı */ }
+}
+
 function announceResult(res) {
-	if (!res.discovered) return;
+	(res.newBadges || []).forEach((b, i) => {
+		setTimeout(() => { toast(`🎖️ Rozet kazandın: ${b.emoji} ${b.name}`, "gold", 4500); sfx("badge"); }, 900 + i * 1200);
+	});
+	if (!res.discovered) { sfx("merge"); return; }
 	if (res.isNew) {
 		toast(`🏆 İlk Keşif: ${res.emoji} ${res.name}`, "gold", 4500);
 		confetti();
+		sfx("first");
 	} else {
 		toast(`🎉 Yeni keşif: ${res.emoji} ${res.name}`);
+		sfx("discover");
 	}
 	freshNames.add(norm(res.name));
 	setTimeout(() => { freshNames.delete(norm(res.name)); renderChips(); }, 10000);
@@ -56,6 +92,7 @@ function handleCombineError(err) {
 		openSettings("Sınırsız birleşim için ücretsiz bir Gemini anahtarı girin — aistudio.google.com/apikey");
 		return;
 	}
+	sfx("error");
 	toast(err.message, "error", 4000);
 }
 
@@ -369,14 +406,26 @@ $("#btn-clear").addEventListener("click", () => {
 
 $("#btn-book").addEventListener("click", () => {
 	const stats = Store.stats;
+	const maxDepth = elementList().reduce((m, e) => Math.max(m, elementDepth(e.name)), 0);
 	$("#book-stats").innerHTML = `
 		<div class="stat"><b>${stats.discoveries}</b><span>element</span></div>
 		<div class="stat"><b>${stats.combos}</b><span>birleştirme</span></div>
-		<div class="stat"><b>${stats.aiCalls}</b><span>yapay zekâ</span></div>`;
+		<div class="stat"><b>${stats.aiCalls}</b><span>yapay zekâ</span></div>
+		<div class="stat"><b>${maxDepth}</b><span>en derin zincir</span></div>`;
+
+	const earned = Store.badges;
+	$("#badge-grid").innerHTML = BADGES.map((b) => `
+		<div class="badge-card ${earned[b.id] ? "earned" : "locked"}">
+			<span class="b-emoji">${b.emoji}</span>
+			<span class="b-name">${b.name}</span>
+			<span class="b-goal">${b.goal}</span>
+		</div>`).join("");
+
 	const list = $("#book-list");
 	list.innerHTML = "";
 	elementList().forEach((e) => {
 		const li = document.createElement("li");
+		li.dataset.name = e.name;
 		const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
 		const from = e.fromPair ? `${e.fromPair[0]} + ${e.fromPair[1]}` : "başlangıç";
 		li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}</span>
@@ -384,6 +433,58 @@ $("#btn-book").addEventListener("click", () => {
 		list.appendChild(li);
 	});
 	$("#modal-book").hidden = false;
+});
+
+/* ---------- Element detayı: hikâye + soy ağacı ---------- */
+
+function lineageSteps(name, seen = new Set(), out = []) {
+	const e = getElement(name);
+	if (!e || !e.fromPair || seen.has(norm(name)) || out.length >= 30) return out;
+	seen.add(norm(name));
+	out.push(e);
+	lineageSteps(e.fromPair[0], seen, out);
+	lineageSteps(e.fromPair[1], seen, out);
+	return out;
+}
+
+function fmtEl(name) {
+	const e = getElement(name);
+	return e ? `${e.emoji} ${escapeHtml(e.name)}` : escapeHtml(name);
+}
+
+function openDetail(name) {
+	const e = getElement(name);
+	if (!e) return;
+	$("#detail-title").textContent = `${e.emoji} ${e.name}`;
+	$("#detail-desc").textContent = e.desc || "";
+	$("#detail-desc").hidden = !e.desc;
+	const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+	const depth = elementDepth(e.name);
+	$("#detail-meta").textContent =
+		`${date} tarihinde keşfedildi · derinlik: ${depth}` + (e.firstDiscovery ? " · 🏆 İlk Keşif" : "");
+	const lin = $("#detail-lineage");
+	lin.innerHTML = "";
+	const steps = lineageSteps(e.name);
+	if (!steps.length) {
+		lin.innerHTML = "<li><span class='sub'>Bu bir başlangıç elementi — her şey onunla başladı.</span></li>";
+	} else {
+		steps.forEach((s) => {
+			const li = document.createElement("li");
+			li.dataset.name = s.name;
+			li.innerHTML = `<span>${fmtEl(s.name)}</span><span class="sub">${fmtEl(s.fromPair[0])} + ${fmtEl(s.fromPair[1])}</span>`;
+			lin.appendChild(li);
+		});
+	}
+	$("#modal-detail").hidden = false;
+}
+
+$("#book-list").addEventListener("click", (ev) => {
+	const li = ev.target.closest("li[data-name]");
+	if (li) openDetail(li.dataset.name);
+});
+$("#detail-lineage").addEventListener("click", (ev) => {
+	const li = ev.target.closest("li[data-name]");
+	if (li) openDetail(li.dataset.name);
 });
 
 /* ---------- Ayarlar ---------- */
@@ -405,12 +506,22 @@ function openSettings(hint = "") {
 	$("#ai-provider").value = s.aiProvider || "gemini";
 	if (s.apiKey) $("#api-key-input").value = s.apiKey;
 	if (s.geminiKey) $("#gemini-key-input").value = s.geminiKey;
+	$("#sound-toggle").checked = s.sound !== false;
+	const mem = Store.memory;
+	const learned = Object.keys(Store.recipes).length;
+	$("#memory-info").textContent =
+		`Oyun belleği: ${mem.length} olay kaydı · ${learned} öğrenilmiş tarif · ${Object.keys(SEED_RECIPES).length} yerleşik tarif.`;
 	syncProviderRows();
 	updateKeyStatus();
 	$("#settings-hint").textContent = hint;
 	$("#settings-hint").hidden = !hint;
 	$("#modal-settings").hidden = false;
 }
+
+$("#sound-toggle").addEventListener("change", () => {
+	Store.settings = { ...Store.settings, sound: $("#sound-toggle").checked };
+	if ($("#sound-toggle").checked) sfx("discover");
+});
 
 $("#btn-settings").addEventListener("click", () => openSettings());
 $("#ai-provider").addEventListener("change", syncProviderRows);
@@ -426,13 +537,22 @@ $("#btn-save-key").addEventListener("click", () => {
 	toast("Ayarlar kaydedildi ✓");
 });
 
-$("#btn-export").addEventListener("click", () => {
-	const blob = new Blob([JSON.stringify(Store.exportAll(), null, 2)], { type: "application/json" });
+function downloadBlob(content, filename, type) {
+	const blob = new Blob([content], { type });
 	const a = document.createElement("a");
 	a.href = URL.createObjectURL(blob);
-	a.download = "element-simyasi-yedek.json";
+	a.download = filename;
 	a.click();
 	URL.revokeObjectURL(a.href);
+}
+
+$("#btn-export").addEventListener("click", () => {
+	downloadBlob(JSON.stringify(Store.exportAll(), null, 2), "element-simyasi-yedek.json", "application/json");
+});
+
+$("#btn-export-train").addEventListener("click", () => {
+	downloadBlob(trainingDataJsonl(), "element-simyasi-egitim.jsonl", "application/jsonl");
+	toast("🧠 Eğitim verisi indirildi");
 });
 
 $("#btn-reset").addEventListener("click", () => {

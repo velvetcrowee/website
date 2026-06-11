@@ -129,9 +129,33 @@ const COMBINE_SCHEMA = {
 		name: { type: "string", description: "Sonuç elementin Türkçe adı, en fazla 3 kelime, baş harfler büyük" },
 		emoji: { type: "string", description: "Kavramı en iyi anlatan TEK emoji" },
 		isNew: { type: "boolean", description: "Sıra dışı/yaratıcı bir kavramsa true, bilinen temel bir birleşimse false" },
+		desc: { type: "string", description: "Sonucu bir cümleyle anlatan kısa Türkçe açıklama" },
 	},
-	required: ["name", "emoji", "isNew"],
+	required: ["name", "emoji", "isNew", "desc"],
 };
+
+/* Oyunun belleğinden prompt'a bağlam üretir: son keşifler ve oyuncunun
+   kendi dünyasından örnek tarifler. Oyun ilerledikçe yapay zekâ bu dünyayla
+   tutarlı kalır ve daha cesur kavramlara yönelir — oyun keşifle gelişir. */
+function memoryContext() {
+	const els = elementList();
+	const count = els.length;
+	const recent = els.slice(0, 12).map((e) => `${e.emoji} ${e.name}`).join(", ");
+	const learned = Object.entries(Store.recipes).slice(-8)
+		.map(([k, r]) => { const [x, y] = k.split("++"); return `${x} + ${y} = ${r.name}`; });
+	const level = count < 20
+		? "Oyun henüz başlarda: temel, öğretici ve doğal sonuçlara öncelik ver."
+		: count < 60
+			? "Oyuncu ilerledi: daha yaratıcı olabilirsin; bilim, tarih ve kültüre açıl."
+			: "Oyuncu usta seviyesinde: cesur ol; uzay, mitoloji, teknoloji, soyut kavramlar ve popüler kültürden sıra dışı sonuçlar üretebilirsin.";
+	const lines = [
+		`Oyunun hafızası: oyuncu şu ana kadar ${count} element keşfetti.`,
+		recent ? `Son keşifler: ${recent}.` : "",
+		learned.length ? `Oyuncunun dünyasından örnek tarifler: ${learned.join("; ")}.` : "",
+		`Bu dünyayla tutarlı kal. ${level}`,
+	];
+	return lines.filter(Boolean).join("\n");
+}
 
 function combinePrompt(a, b) {
 	return [
@@ -144,6 +168,9 @@ function combinePrompt(a, b) {
 		"5. Aynı iki girdi için her zaman aynı tek cevabı verirmiş gibi en olası sonucu seç.",
 		"6. emoji alanına kavramı en iyi anlatan TEK emoji yaz.",
 		"7. isNew: sonuç sıra dışı/şaşırtıcı yeni bir buluşsa true, herkesin bileceği temel bir birleşimse false.",
+		"8. desc alanına sonucu bir cümleyle anlatan kısa, eğlenceli bir Türkçe açıklama yaz.",
+		"",
+		memoryContext(),
 		"",
 		`Birleştirilecek elementler: "${a.emoji} ${a.name}" + "${b.emoji} ${b.name}"`,
 	].join("\n");
@@ -157,7 +184,11 @@ function mockEnabled() {
 
 function mockCombine(a, b) {
 	const name = `${a.name}-${b.name} Karışımı`.slice(0, 40);
-	return { name, emoji: "🧪", isNew: (norm(a.name) + norm(b.name)).length % 3 === 0 };
+	return {
+		name, emoji: "🧪",
+		isNew: (norm(a.name) + norm(b.name)).length % 3 === 0,
+		desc: `${a.name} ile ${b.name} deney tüpünde buluştu.`,
+	};
 }
 
 /* İki elementi yapay zekâ ile birleştirir; { name, emoji, isNew } döner. */
