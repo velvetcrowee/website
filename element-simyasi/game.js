@@ -4,6 +4,37 @@
 /* Aynı ikili için eşzamanlı ikinci istek atılmasın. */
 const inFlight = new Set();
 
+/* Yapay zekâ istekleri sıraya alınır: hızlı oynayınca paralel çağrı atıp
+   limite takılmamak için aynı anda yalnızca bir istek gider, aralarına küçük
+   bir bekleme konur. Seed/önbellek isabetleri kuyruğa girmez, anında döner. */
+let aiQueue = Promise.resolve();
+function enqueueAi(task) {
+	const run = aiQueue.then(task, task);
+	// Kuyruğun bir sonraki işe geçmeden önce kısa nefes alması (limit dostu).
+	aiQueue = run.then(() => sleepGame(350), () => sleepGame(350));
+	return run;
+}
+const sleepGame = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* Topluluk tarif paketi: tüm oyuncuların paylaştığı ortak bellek. Açılışta
+   recipes.json'dan indirilip belleğe katılır; bir oyuncunun keşfettiği yaygın
+   birleşimler bu pakete eklendiğinde herkes için "sistem bilir" hâle gelir ve
+   yapay zekâya gerek kalmaz. */
+let COMMUNITY_RECIPES = {};
+
+async function loadCommunityRecipes() {
+	try {
+		const res = await fetch("recipes.json", { cache: "no-cache" });
+		if (res.ok) COMMUNITY_RECIPES = await res.json();
+	} catch { /* çevrimdışı veya bulunamadı — yerleşik tarifler yeter */ }
+	return COMMUNITY_RECIPES;
+}
+
+/* Yapay zekâ çağrısı yapmadan, bilinen kaynaklardan tarif bul. */
+function lookupRecipe(key) {
+	return SEED_RECIPES[key] || COMMUNITY_RECIPES[key] || Store.recipes[key] || null;
+}
+
 function getElement(name) {
 	return Store.elements[norm(name)] || null;
 }
@@ -109,10 +140,14 @@ async function combine(nameA, nameB) {
 	if (inFlight.has(key)) throw new Error("BUSY");
 	inFlight.add(key);
 	try {
-		let source = SEED_RECIPES[key] ? "seed" : Store.recipes[key] ? "cache" : (mockEnabled() ? "mock" : "ai");
-		let result = SEED_RECIPES[key] || Store.recipes[key];
+		let source = SEED_RECIPES[key] ? "seed"
+			: COMMUNITY_RECIPES[key] ? "community"
+			: Store.recipes[key] ? "cache"
+			: (mockEnabled() ? "mock" : "ai");
+		let result = lookupRecipe(key);
 		if (!result) {
-			result = validateResult(await aiCombine(a, b));
+			// Yalnızca gerçek yapay zekâ çağrıları sıraya alınır.
+			result = validateResult(await enqueueAi(() => aiCombine(a, b)));
 			Store.recipes = { ...Store.recipes, [key]: result };
 			const stats = Store.stats;
 			stats.aiCalls += 1;
@@ -162,7 +197,7 @@ async function combine(nameA, nameB) {
 /* Tüm bilinen tarifleri (yerleşik + öğrenilmiş) eğitim verisi olarak döker.
    Her satır sohbet biçiminde bir JSONL kaydıdır — ince ayar için hazırdır. */
 function trainingDataJsonl() {
-	const all = { ...SEED_RECIPES, ...Store.recipes };
+	const all = { ...SEED_RECIPES, ...COMMUNITY_RECIPES, ...Store.recipes };
 	return Object.entries(all).map(([key, r]) => {
 		const [x, y] = key.split("++");
 		const out = { name: r.name, emoji: r.emoji, isNew: !!r.isNew };
