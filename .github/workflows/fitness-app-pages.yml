@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - claude/fitness-ai-tracking-app-efxn7m
+      - claude/infinite-element-game-gitt8x
       - master
     paths:
       - "fitness-app/**"
