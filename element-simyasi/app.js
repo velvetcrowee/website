@@ -509,8 +509,9 @@ function openSettings(hint = "") {
 	$("#sound-toggle").checked = s.sound !== false;
 	const mem = Store.memory;
 	const learned = Object.keys(Store.recipes).length;
+	const community = Object.keys(COMMUNITY_RECIPES).length;
 	$("#memory-info").textContent =
-		`Oyun belleği: ${mem.length} olay kaydı · ${learned} öğrenilmiş tarif · ${Object.keys(SEED_RECIPES).length} yerleşik tarif.`;
+		`Oyun belleği: ${mem.length} olay · ${learned} öğrenilmiş tarif · ${Object.keys(SEED_RECIPES).length} yerleşik · ${community} topluluk tarifi (paylaşılan).`;
 	syncProviderRows();
 	updateKeyStatus();
 	$("#settings-hint").textContent = hint;
@@ -555,6 +556,39 @@ $("#btn-export-train").addEventListener("click", () => {
 	toast("🧠 Eğitim verisi indirildi");
 });
 
+/* Başka oyuncunun yedeğinden (dışa aktarılan JSON) tarif ve elementleri katar.
+   Aynı ikili için yapay zekâya gerek kalmaz — paylaşılan keşif. */
+$("#btn-import").addEventListener("click", () => $("#import-file").click());
+$("#import-file").addEventListener("change", async (ev) => {
+	const file = ev.target.files[0];
+	if (!file) return;
+	try {
+		const data = JSON.parse(await file.text());
+		const incomingRecipes = data["simya.recipes"] || data.recipes || {};
+		const incomingElements = data["simya.elements"] || data.elements || {};
+		let addedR = 0, addedE = 0;
+		const recipes = Store.recipes;
+		for (const [k, v] of Object.entries(incomingRecipes)) {
+			if (!recipes[k] && v && v.name) { recipes[k] = v; addedR++; }
+		}
+		Store.recipes = recipes;
+		const els = Store.elements;
+		for (const [k, v] of Object.entries(incomingElements)) {
+			if (!els[k] && v && v.name) { els[k] = v; addedE++; }
+		}
+		Store.elements = els;
+		const stats = Store.stats;
+		stats.discoveries = Object.keys(els).length;
+		Store.stats = stats;
+		renderChips();
+		toast(`📥 ${addedR} tarif, ${addedE} element aktarıldı`);
+		openSettings();
+	} catch {
+		toast("Dosya okunamadı — geçerli bir yedek JSON seçin.", "error", 4000);
+	}
+	ev.target.value = "";
+});
+
 $("#btn-reset").addEventListener("click", () => {
 	if (confirm("Tüm keşifler, tarifler ve ayarlar silinecek. Emin misiniz?")) {
 		Store.resetAll();
@@ -572,8 +606,11 @@ $$(".modal").forEach((m) => {
 
 /* ---------- Başlangıç ---------- */
 
-function init() {
+async function init() {
 	seedBaseElements();
+
+	// Paylaşılan topluluk tariflerini indir (oyun bu bittikten önce de oynanır).
+	loadCommunityRecipes();
 
 	wsItems = Store.workspace;
 	wsIdSeq = wsItems.reduce((m, i) => Math.max(m, parseInt(i.id.slice(1)) || 0), 0) + 1;

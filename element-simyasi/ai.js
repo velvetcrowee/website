@@ -41,7 +41,9 @@ async function claudeRequest(body) {
 		} catch { /* gövde okunamadı */ }
 		if (res.status === 401) msg = "Claude API anahtarı geçersiz. Ayarlar'dan kontrol edin.";
 		if (res.status === 429) msg = "İstek limiti aşıldı, biraz bekleyip tekrar deneyin.";
-		throw new Error(msg);
+		const e = new Error(msg);
+		e.retryable = res.status === 429 || res.status === 503 || res.status === 529;
+		throw e;
 	}
 	return res.json();
 }
@@ -71,6 +73,9 @@ async function geminiRequest({ parts, schema, maxTokens }) {
 	const body = {
 		contents: [{ role: "user", parts }],
 		generationConfig: {
+			// Gemini 2.5 "düşünme" tokenları çıktı bütçesinden yer; kapatınca
+			// yanıt yarıda kesilmez (bozuk JSON biter), daha hızlı ve ucuz olur.
+			thinkingConfig: { thinkingBudget: 0 },
 			maxOutputTokens: maxTokens,
 			...(schema ? { responseMimeType: "application/json", responseSchema: schema } : {}),
 		},
@@ -94,22 +99,46 @@ async function geminiRequest({ parts, schema, maxTokens }) {
 		} catch { /* gövde okunamadı */ }
 		if (res.status === 400 || res.status === 403) msg = "Gemini API anahtarı geçersiz olabilir. Ayarlar'dan kontrol edin.";
 		if (res.status === 429) msg = "Gemini istek limiti aşıldı, biraz bekleyip tekrar deneyin.";
-		throw new Error(msg);
+		const e = new Error(msg);
+		// Geçici hatalar yeniden denenebilir (limit / aşırı yoğunluk / sunucu).
+		e.retryable = res.status === 429 || res.status === 503 || res.status === 500;
+		throw e;
 	}
 	const data = await res.json();
+	// Yanıt MAX_TOKENS yüzünden kesildiyse bunu yeniden denenebilir say.
+	const finish = data.candidates?.[0]?.finishReason;
 	const text = (data.candidates?.[0]?.content?.parts || [])
 		.map((p) => p.text || "")
 		.join("");
-	if (!text) throw new Error("Modelden yanıt alınamadı.");
+	if (!text) {
+		const e = new Error("Modelden yanıt alınamadı.");
+		e.retryable = finish === "MAX_TOKENS" || finish === "OTHER" || !finish;
+		throw e;
+	}
+	if (finish === "MAX_TOKENS") {
+		const e = new Error("Yanıt yarıda kesildi.");
+		e.retryable = true;
+		throw e;
+	}
 	return text;
 }
 
 /* ---------- Sağlayıcıdan bağımsız yardımcılar ---------- */
 
-/* JSON şemalı istek: metin → şemaya uyan nesne. */
-async function aiJson({ prompt, schema, maxTokens }) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* Tek bir JSON şemalı istek (yeniden deneme yok). */
+async function aiJsonOnce({ prompt, schema, maxTokens }) {
 	if (activeProvider() === "gemini") {
-		return JSON.parse(await geminiRequest({ parts: [{ text: prompt }], schema, maxTokens }));
+		const raw = await geminiRequest({ parts: [{ text: prompt }], schema, maxTokens });
+		try {
+			return JSON.parse(raw);
+		} catch {
+			// Yarıda kesilmiş / bozuk JSON → yeniden denenebilir.
+			const e = new Error("Yanıt çözümlenemedi.");
+			e.retryable = true;
+			throw e;
+		}
 	}
 	const response = await claudeRequest({
 		max_tokens: maxTokens,
@@ -118,7 +147,31 @@ async function aiJson({ prompt, schema, maxTokens }) {
 	});
 	const block = response.content.find((b) => b.type === "text");
 	if (!block) throw new Error("Modelden metin yanıtı alınamadı.");
-	return JSON.parse(block.text);
+	try {
+		return JSON.parse(block.text);
+	} catch {
+		const e = new Error("Yanıt çözümlenemedi.");
+		e.retryable = true;
+		throw e;
+	}
+}
+
+/* JSON şemalı istek + geçici hatalarda üstel backoff'lu yeniden deneme.
+   Limit/yoğunluk/kesik yanıt gibi durumlarda kullanıcıya hata göstermeden
+   kendiliğinden tekrar dener. */
+async function aiJson(opts) {
+	const delays = [800, 2000, 4500];
+	let lastErr;
+	for (let attempt = 0; attempt <= delays.length; attempt++) {
+		try {
+			return await aiJsonOnce(opts);
+		} catch (err) {
+			lastErr = err;
+			if (!err.retryable || attempt === delays.length) throw err;
+			await sleep(delays[attempt]);
+		}
+	}
+	throw lastErr;
 }
 
 /* ---------- Element birleştirme ---------- */
@@ -194,5 +247,5 @@ function mockCombine(a, b) {
 /* İki elementi yapay zekâ ile birleştirir; { name, emoji, isNew } döner. */
 async function aiCombine(a, b) {
 	if (mockEnabled()) return mockCombine(a, b);
-	return aiJson({ prompt: combinePrompt(a, b), schema: COMBINE_SCHEMA, maxTokens: 1000 });
+	return aiJson({ prompt: combinePrompt(a, b), schema: COMBINE_SCHEMA, maxTokens: 400 });
 }

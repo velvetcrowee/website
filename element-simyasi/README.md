@@ -18,6 +18,16 @@ elementler keşfedersiniz — Karadelik'e, Film'e ve ötesine kadar.
   prompt'u bu bellekle beslenir: son keşifler ve oyuncunun kendi tarifleri
   bağlama eklenir, keşif sayısı arttıkça yaratıcılık seviyesi yükselir — oyun
   oynandıkça gelişir.
+- **Paylaşılan topluluk belleği:** `recipes.json` repoda barınan, tüm
+  oyuncuların açılışta indirdiği ortak tarif paketidir (~130 yaygın birleşim).
+  Çözümleme sırası: yerleşik → topluluk → oyuncunun önbelleği → yapay zekâ. Yani
+  yaygın ikililer hiçbir zaman API'ye gitmez; bir oyuncunun keşfi pakete
+  eklendiğinde herkes için "sistem bilir" hâle gelir. Ayarlar'daki **içe/dışa
+  aktar** ile oyuncular tariflerini doğrudan paylaşabilir.
+- **Limit dostu:** Gemini'nin "düşünme" tokenları kapatılır (yanıt yarıda
+  kesilmez), istekler sıraya alınır (hızlı oynayınca paralel patlama olmaz) ve
+  geçici hatalar (limit, yoğunluk, kesik yanıt) kullanıcıya gösterilmeden üstel
+  backoff ile otomatik yeniden denenir.
 - **Eğitim verisi:** Ayarlar'dan tüm öğrenilmiş + yerleşik tarifler, yapay zekâ
   ince ayarına hazır JSONL (sohbet biçimi) olarak dışa aktarılabilir.
 - **Rozetler ve soy ağacı:** Kilometre taşları rozet kazandırır; Keşif

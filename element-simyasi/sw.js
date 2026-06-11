@@ -1,6 +1,6 @@
 /* Çevrimdışı destek: uygulama kabuğunu önbelleğe alır; API istekleri ağa gider. */
 
-const CACHE = "simya-v2";
+const CACHE = "simya-v3";
 const ASSETS = [
 	"./",
 	"./index.html",
@@ -10,6 +10,7 @@ const ASSETS = [
 	"./ai.js",
 	"./game.js",
 	"./app.js",
+	"./recipes.json",
 	"./manifest.webmanifest",
 	"./icons/icon-192.png",
 	"./icons/icon-512.png",

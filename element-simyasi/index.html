@@ -96,6 +96,9 @@
 			<h3>Veriler & Oyun Belleği</h3>
 			<p id="memory-info" class="muted"></p>
 			<button id="btn-export" class="btn full">📤 Verileri dışa aktar (JSON)</button>
+			<button id="btn-import" class="btn full">📥 Başka oyuncudan tarif aktar (JSON)</button>
+			<input type="file" id="import-file" accept="application/json,.json" hidden>
+			<p class="muted">İçe aktarma, başka bir oyuncunun keşfettiği tarifleri sizin oyununuza katar — o ikililer için yapay zekâya gerek kalmaz.</p>
 			<button id="btn-export-train" class="btn full">🧠 Eğitim verisini dışa aktar (JSONL)</button>
 			<p class="muted">Eğitim verisi, oyunun öğrendiği tüm tarifleri yapay zekâ ince ayarına (fine-tuning) hazır sohbet biçiminde dışa aktarır.</p>
 			<button id="btn-reset" class="btn danger full">Tüm verileri sıfırla</button>
