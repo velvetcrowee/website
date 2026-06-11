@@ -26,8 +26,13 @@ elementler keşfedersiniz — Karadelik'e, Film'e ve ötesine kadar.
   aktar** ile oyuncular tariflerini doğrudan paylaşabilir.
 - **Limit dostu:** Gemini'nin "düşünme" tokenları kapatılır (yanıt yarıda
   kesilmez), istekler sıraya alınır (hızlı oynayınca paralel patlama olmaz) ve
-  geçici hatalar (limit, yoğunluk, kesik yanıt) kullanıcıya gösterilmeden üstel
-  backoff ile otomatik yeniden denenir.
+  geçici hatalar (limit, yoğunluk, kesik yanıt) kullanıcıya gösterilmeden
+  otomatik yeniden denenir.
+- **Model rotasyonu:** Gemini'de her modelin kotası ayrıdır. Varsayılan
+  `gemini-2.5-flash-lite` (en hızlı, en yüksek ücretsiz limit); 429/503'te
+  otomatik olarak `gemini-2.5-flash` → `gemini-2.0-flash`'a geçilir. Tek
+  modelin dakika limitine takılıp beklemek yerine üç modelin toplam kotası
+  kullanılır.
 - **Eğitim verisi:** Ayarlar'dan tüm öğrenilmiş + yerleşik tarifler, yapay zekâ
   ince ayarına hazır JSONL (sohbet biçimi) olarak dışa aktarılabilir.
 - **Rozetler ve soy ağacı:** Kilometre taşları rozet kazandırır; Keşif

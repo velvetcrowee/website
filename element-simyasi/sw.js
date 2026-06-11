@@ -1,6 +1,6 @@
 /* Çevrimdışı destek: uygulama kabuğunu önbelleğe alır; API istekleri ağa gider. */
 
-const CACHE = "simya-v3";
+const CACHE = "simya-v4";
 const ASSETS = [
 	"./",
 	"./index.html",
