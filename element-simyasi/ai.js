@@ -5,7 +5,13 @@
 
 const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-opus-4-8";
-const GEMINI_MODEL = "gemini-2.5-flash";
+
+/* Gemini'de her modelin AYRI ücretsiz kotası vardır. Limit dolunca sıradaki
+   modele geçilir (rotasyon) — tek modelin dakika limitine takılıp beklemek
+   yerine üç modelin toplam kotası kullanılır. flash-lite hem en hızlısı hem
+   en yüksek limitlisi olduğu için ilk sıradadır; bu basit görev için yeterlidir. */
+const GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
+let geminiModelIdx = 0;
 
 function activeProvider() {
 	return Store.settings.aiProvider || "gemini";
@@ -65,23 +71,25 @@ function withStrict(schema) {
 
 /* ---------- Gemini ---------- */
 
-async function geminiRequest({ parts, schema, maxTokens }) {
+async function geminiRequest({ parts, schema, maxTokens, model }) {
 	const apiKey = Store.settings.geminiKey;
 	if (!apiKey) {
 		throw new Error("NO_KEY");
 	}
+	model = model || GEMINI_MODELS[0];
 	const body = {
 		contents: [{ role: "user", parts }],
 		generationConfig: {
 			// Gemini 2.5 "düşünme" tokenları çıktı bütçesinden yer; kapatınca
 			// yanıt yarıda kesilmez (bozuk JSON biter), daha hızlı ve ucuz olur.
-			thinkingConfig: { thinkingBudget: 0 },
+			// (2.0 modelleri thinkingConfig kabul etmez.)
+			...(model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
 			maxOutputTokens: maxTokens,
 			...(schema ? { responseMimeType: "application/json", responseSchema: schema } : {}),
 		},
 	};
 	const res = await fetch(
-		`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+		`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
 		{
 			method: "POST",
 			headers: {
@@ -102,6 +110,8 @@ async function geminiRequest({ parts, schema, maxTokens }) {
 		const e = new Error(msg);
 		// Geçici hatalar yeniden denenebilir (limit / aşırı yoğunluk / sunucu).
 		e.retryable = res.status === 429 || res.status === 503 || res.status === 500;
+		// Limitte sıradaki modele geçilir (her modelin kotası ayrıdır).
+		e.rateLimited = res.status === 429 || res.status === 503;
 		throw e;
 	}
 	const data = await res.json();
@@ -130,7 +140,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* Tek bir JSON şemalı istek (yeniden deneme yok). */
 async function aiJsonOnce({ prompt, schema, maxTokens }) {
 	if (activeProvider() === "gemini") {
-		const raw = await geminiRequest({ parts: [{ text: prompt }], schema, maxTokens });
+		const model = GEMINI_MODELS[geminiModelIdx % GEMINI_MODELS.length];
+		const raw = await geminiRequest({ parts: [{ text: prompt }], schema, maxTokens, model });
 		try {
 			return JSON.parse(raw);
 		} catch {
@@ -156,19 +167,26 @@ async function aiJsonOnce({ prompt, schema, maxTokens }) {
 	}
 }
 
-/* JSON şemalı istek + geçici hatalarda üstel backoff'lu yeniden deneme.
-   Limit/yoğunluk/kesik yanıt gibi durumlarda kullanıcıya hata göstermeden
-   kendiliğinden tekrar dener. */
+/* JSON şemalı istek + geçici hatalarda yeniden deneme.
+   Limitte (429/503) beklemek yerine SIRADAKİ Gemini modeline geçilir — her
+   modelin kotası ayrı olduğu için oyun beklemeden devam eder. Diğer geçici
+   hatalarda (kesik/bozuk yanıt) kısa backoff ile aynı model tekrar denenir. */
 async function aiJson(opts) {
-	const delays = [800, 2000, 4500];
+	const maxAttempts = 5;
 	let lastErr;
-	for (let attempt = 0; attempt <= delays.length; attempt++) {
+	for (let attempt = 0; attempt < maxAttempts; attempt++) {
 		try {
 			return await aiJsonOnce(opts);
 		} catch (err) {
 			lastErr = err;
-			if (!err.retryable || attempt === delays.length) throw err;
-			await sleep(delays[attempt]);
+			if (!err.retryable || attempt === maxAttempts - 1) throw err;
+			if (err.rateLimited && activeProvider() === "gemini") {
+				// Model rotasyonu: kalıcıdır, sonraki istekler de buradan devam eder.
+				geminiModelIdx = (geminiModelIdx + 1) % GEMINI_MODELS.length;
+				await sleep(300);
+			} else {
+				await sleep([800, 1500, 3000, 5000][attempt] || 5000);
+			}
 		}
 	}
 	throw lastErr;
