@@ -1,4 +1,4 @@
-name: Deploy fitness app to GitHub Pages
+name: Deploy apps to GitHub Pages
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - master
     paths:
       - "fitness-app/**"
+      - "element-simyasi/**"
       - ".github/workflows/fitness-app-pages.yml"
   workflow_dispatch:
 
@@ -34,10 +35,16 @@ jobs:
         with:
           enablement: true
 
-      - name: Upload fitness app
+      - name: Assemble site
+        run: |
+          mkdir -p _site/element-simyasi
+          cp -r fitness-app/* _site/
+          cp -r element-simyasi/* _site/element-simyasi/
+
+      - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: fitness-app
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment
