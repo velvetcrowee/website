@@ -1,0 +1,14 @@
+{
+	"name": "Element Simyası — Sonsuz Element Birleştirme Oyunu",
+	"short_name": "Simya",
+	"description": "Ateş, Su, Toprak ve Hava ile başla; elementleri birleştirerek yapay zekâ destekli sınırsız yeni element keşfet.",
+	"lang": "tr",
+	"start_url": "./",
+	"display": "standalone",
+	"background_color": "#0f172a",
+	"theme_color": "#0f172a",
+	"icons": [
+		{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+		{ "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+	]
+}

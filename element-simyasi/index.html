@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+	<meta name="theme-color" content="#0f172a">
+	<title>Element Simyası — Sonsuz Element Birleştirme</title>
+	<link rel="manifest" href="manifest.webmanifest">
+	<link rel="icon" href="icons/icon-192.png">
+	<link rel="apple-touch-icon" href="icons/icon-192.png">
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<header class="app-header">
+		<h1>🧪 Element Simyası</h1>
+		<span id="element-count"></span>
+		<div class="header-btns">
+			<button id="btn-book" class="btn icon" title="Keşif Defteri">📖</button>
+			<button id="btn-clear" class="btn icon" title="Tuvali temizle">🗑️</button>
+			<button id="btn-settings" class="btn icon" title="Ayarlar">⚙️</button>
+		</div>
+	</header>
+
+	<main id="game">
+		<div id="workspace"></div>
+		<aside id="panel">
+			<!-- Mobil birleştirme çubuğu: [A] + [B] = [?] -->
+			<div id="combiner">
+				<button id="slot-a" class="slot" data-name="">＋ Seç</button>
+				<span class="op">+</span>
+				<button id="slot-b" class="slot" data-name="">＋ Seç</button>
+				<span class="op">=</span>
+				<button id="slot-result" class="slot result" data-name="">?</button>
+			</div>
+			<input type="search" id="search" placeholder="🔍 Ara…" autocomplete="off">
+			<div id="chip-list"></div>
+		</aside>
+	</main>
+
+	<!-- Keşif Defteri -->
+	<div id="modal-book" class="modal" hidden>
+		<div class="modal-card">
+			<div class="row-between">
+				<h2>📖 Keşif Defteri</h2>
+				<button class="del modal-close">✕</button>
+			</div>
+			<div id="book-stats" class="stats-row"></div>
+			<ul id="book-list" class="item-list"></ul>
+		</div>
+	</div>
+
+	<!-- Ayarlar -->
+	<div id="modal-settings" class="modal" hidden>
+		<div class="modal-card">
+			<div class="row-between">
+				<h2>⚙️ Ayarlar</h2>
+				<button class="del modal-close">✕</button>
+			</div>
+			<p id="settings-hint" class="muted accent-text" hidden></p>
+			<h3>Yapay Zekâ</h3>
+			<p class="muted">Bilinmeyen birleşimleri yapay zekâ üretir — olasılıklar sınırsızdır. Anahtarlar yalnızca bu cihazda saklanır.</p>
+			<select id="ai-provider">
+				<option value="gemini">Gemini (Google) — ücretsiz anahtar</option>
+				<option value="claude">Claude (Anthropic)</option>
+			</select>
+			<div id="gemini-key-row">
+				<input type="password" id="gemini-key-input" placeholder="Gemini anahtarı (AIza...)">
+				<p class="muted">Ücretsiz anahtar: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></p>
+			</div>
+			<div id="claude-key-row" hidden>
+				<input type="password" id="api-key-input" placeholder="Claude anahtarı (sk-ant-...)">
+				<p class="muted">Anahtar: <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a></p>
+			</div>
+			<button id="btn-save-key" class="btn primary full">Kaydet</button>
+			<p id="key-status" class="muted"></p>
+			<h3>Veriler</h3>
+			<button id="btn-export" class="btn full">📤 Verileri dışa aktar (JSON)</button>
+			<button id="btn-reset" class="btn danger full">Tüm verileri sıfırla</button>
+		</div>
+	</div>
+
+	<div id="toast-area"></div>
+	<div id="confetti-area"></div>
+
+	<script src="data.js"></script>
+	<script src="seed.js"></script>
+	<script src="ai.js"></script>
+	<script src="game.js"></script>
+	<script src="app.js"></script>
+</body>
+</html>

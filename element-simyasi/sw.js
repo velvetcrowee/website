@@ -1,13 +1,15 @@
 /* Çevrimdışı destek: uygulama kabuğunu önbelleğe alır; API istekleri ağa gider. */
 
-const CACHE = "fittakip-v6";
+const CACHE = "simya-v1";
 const ASSETS = [
 	"./",
 	"./index.html",
 	"./styles.css",
-	"./app.js",
-	"./ai.js",
 	"./data.js",
+	"./seed.js",
+	"./ai.js",
+	"./game.js",
+	"./app.js",
 	"./manifest.webmanifest",
 	"./icons/icon-192.png",
 	"./icons/icon-512.png",
@@ -29,8 +31,6 @@ self.addEventListener("fetch", (e) => {
 	const url = new URL(e.request.url);
 	// API istekleri ve diğer origin'ler her zaman ağa gider.
 	if (url.origin !== location.origin) return;
-	// Element Simyası kendi service worker'ını kullanır; bu kapsam dışı kalsın.
-	if (url.pathname.includes("/element-simyasi/")) return;
 	e.respondWith(
 		caches.match(e.request).then((cached) =>
 			cached ||
