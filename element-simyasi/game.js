@@ -22,14 +22,25 @@ const sleepGame = (ms) => new Promise((r) => setTimeout(r, ms));
    yapay zekâya gerek kalmaz. */
 let COMMUNITY_RECIPES = {};
 
+/* Sitenin yerleşik küresel havuzu. Site sahibi cloudflare-worker/ altındaki
+   Worker'ı BİR KEZ kurup adresini buraya yazar; ondan sonra HER oyuncu
+   otomatik bağlanır — oyuncuların hiçbir şey yapması gerekmez.
+   Boşken havuz devre dışıdır; Ayarlar'daki alan kişisel havuz kullananlar
+   için geçersiz kılma (override) görevi görür. */
+const DEFAULT_POOL_URL = "";
+
+function activePoolUrl() {
+	return (Store.settings.poolUrl || DEFAULT_POOL_URL).replace(/\/+$/, "");
+}
+
 async function loadCommunityRecipes() {
 	try {
 		const res = await fetch("recipes.json", { cache: "no-cache" });
 		if (res.ok) COMMUNITY_RECIPES = await res.json();
 	} catch { /* çevrimdışı veya bulunamadı — yerleşik tarifler yeter */ }
-	// Küresel havuz (Cloudflare Worker) ayarlıysa onu da kat: tüm oyuncuların
+	// Küresel havuz (Cloudflare Worker) varsa onu da kat: tüm oyuncuların
 	// AI keşifleri tek havuzda birikir, aynı ikili dünyada bir kez sorulur.
-	const poolUrl = (Store.settings.poolUrl || "").replace(/\/+$/, "");
+	const poolUrl = activePoolUrl();
 	if (poolUrl) {
 		try {
 			const res = await fetch(poolUrl + "/pack");
@@ -45,7 +56,7 @@ async function loadCommunityRecipes() {
 
 /* Yapay zekânın ürettiği yeni tarifi küresel havuza gönderir (beklemeden). */
 function pushToPool(key, result) {
-	const poolUrl = (Store.settings.poolUrl || "").replace(/\/+$/, "");
+	const poolUrl = activePoolUrl();
 	if (!poolUrl) return;
 	fetch(poolUrl + "/recipe", {
 		method: "POST",
