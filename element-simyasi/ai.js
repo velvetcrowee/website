@@ -333,8 +333,38 @@ function mockCombine(a, b) {
 	};
 }
 
-/* İki elementi yapay zekâ ile birleştirir; { name, emoji, isNew } döner. */
+/* Ortak yapay zekâ: oyuncunun kendi anahtarı yoksa istek, havuz sunucusuna
+   gider — DeepSeek anahtarı sunucuda gizli tutulur, tarayıcıya asla inmez. */
+async function poolCombine(poolUrl, a, b) {
+	const res = await fetch(poolUrl + "/combine", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({
+			a: { name: a.name, emoji: a.emoji },
+			b: { name: b.name, emoji: b.emoji },
+		}),
+	});
+	if (!res.ok) {
+		let msg = `Ortak yapay zekâ hatası (${res.status})`;
+		try {
+			const err = await res.json();
+			if (err.error) msg = err.error;
+		} catch { /* gövde okunamadı */ }
+		// Sunucuda ortak anahtar yoksa normal anahtarsız akışa düş.
+		if (res.status === 501) throw new Error("NO_KEY");
+		const e = new Error(msg);
+		e.retryable = res.status === 429 || res.status === 503 || res.status === 500;
+		throw e;
+	}
+	return res.json();
+}
+
+/* İki elementi yapay zekâ ile birleştirir; { name, emoji, isNew, ... } döner. */
 async function aiCombine(a, b) {
 	if (mockEnabled()) return mockCombine(a, b);
+	if (!activeKey()) {
+		const poolUrl = typeof activePoolUrl === "function" ? activePoolUrl() : "";
+		if (poolUrl) return poolCombine(poolUrl, a, b);
+	}
 	return aiJson({ prompt: combinePrompt(a, b), schema: COMBINE_SCHEMA, maxTokens: 400 });
 }

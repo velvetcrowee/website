@@ -64,13 +64,37 @@ Cloudflare'in ücretsiz katmanı bu iş için fazlasıyla yeterlidir
 > ardından Worker ayarlarından **KV Namespace Binding** ekleyin
 > (isim: `RECIPES`).
 
+## Ortak yapay zekâ: anahtarı sunucuya gömme (isteğe bağlı, önerilen)
+
+> ⚠️ API anahtarını **asla oyun koduna/siteye yazmayın** — kod herkese açıktır,
+> anahtar dakikalar içinde çalınır. Anahtarın güvenli yeri burası, sunucudur.
+
+DeepSeek anahtarınızı Worker'a **gizli değişken** olarak eklerseniz, kendi
+anahtarı olmayan TÜM oyuncular otomatik olarak ortak yapay zekâyı kullanır
+(anahtar tarayıcıya hiç inmez):
+
+```sh
+cd cloudflare-worker
+wrangler secret put DEEPSEEK_KEY
+# sorulduğunda sk-... anahtarınızı yapıştırın
+wrangler deploy
+```
+
+Panelden: Worker → **Settings → Variables and Secrets → Add → Secret**,
+isim: `DEEPSEEK_KEY`.
+
+Korumalar: sonuçlar önce havuzdan döner (tekrar sorular bedava), IP başına
+dakikada 15 yeni istek sınırı vardır ve `deepseek-chat` çok ucuz olduğu için
+2$ bakiye ~binlerce birleşime yeter.
+
 ## Uçlar
 
 | Uç | Açıklama |
 |---|---|
-| `GET /` | Havuz durumu (tarif sayısı) |
+| `GET /` | Havuz durumu (tarif sayısı, ortak yapay zekâ açık mı) |
 | `GET /pack` | Tüm havuz (oyun açılışta bunu indirir) |
 | `POST /recipe` | `{ key, result }` — yeni tarif ekler; var olanın üzerine yazmaz (ilk yazan kazanır, havuz deterministik kalır) |
+| `POST /combine` | `{ a:{name,emoji}, b:{name,emoji} }` — havuzdan, yoksa ortak yapay zekâdan tarif döndürür |
 
 ## Notlar
 
