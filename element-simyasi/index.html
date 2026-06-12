@@ -85,11 +85,16 @@
 			<p class="muted">Bilinmeyen birleşimleri yapay zekâ üretir — olasılıklar sınırsızdır. Anahtarlar yalnızca bu cihazda saklanır.</p>
 			<select id="ai-provider">
 				<option value="gemini">Gemini (Google) — ücretsiz anahtar</option>
+				<option value="deepseek">DeepSeek — ucuz, güçlü</option>
 				<option value="claude">Claude (Anthropic)</option>
 			</select>
 			<div id="gemini-key-row">
 				<input type="password" id="gemini-key-input" placeholder="Gemini anahtarı (AIza...)">
 				<p class="muted">Ücretsiz anahtar: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></p>
+			</div>
+			<div id="deepseek-key-row" hidden>
+				<input type="password" id="deepseek-key-input" placeholder="DeepSeek anahtarı (sk-...)">
+				<p class="muted">Anahtar: <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a></p>
 			</div>
 			<div id="claude-key-row" hidden>
 				<input type="password" id="api-key-input" placeholder="Claude anahtarı (sk-ant-...)">

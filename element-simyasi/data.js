@@ -19,7 +19,7 @@ const DB = {
 
 const Store = {
 	get settings() {
-		return DB.read("settings", { aiProvider: "gemini", apiKey: "", geminiKey: "", sound: true });
+		return DB.read("settings", { aiProvider: "gemini", apiKey: "", geminiKey: "", deepseekKey: "", sound: true });
 	},
 	set settings(v) { DB.write("settings", v); },
 

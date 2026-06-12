@@ -8,9 +8,12 @@ elementler keşfedersiniz — Karadelik'e, Film'e ve ötesine kadar.
 
 - **Yerleşik tarifler:** ~40 klasik birleşim (Ateş + Su = Buhar gibi) anahtar
   gerektirmeden çalışır.
-- **Sınırsız mod:** Bilinmeyen her ikiliyi yapay zekâ üretir. Ayarlar'dan ücretsiz
-  bir Gemini anahtarı (aistudio.google.com/apikey) veya Claude anahtarı girin.
-  Anahtarlar yalnızca cihazınızda (localStorage) saklanır.
+- **Sınırsız mod:** Bilinmeyen her ikiliyi yapay zekâ üretir. Ayarlar'dan üç
+  sağlayıcıdan biri için anahtar girin — anahtarlar yalnızca cihazınızda
+  (localStorage) saklanır:
+  - **Gemini** (Google) — ücretsiz anahtar: aistudio.google.com/apikey
+  - **DeepSeek** — ucuz ve güçlü: platform.deepseek.com (OpenAI uyumlu, JSON modu)
+  - **Claude** (Anthropic) — platform.claude.com
 - **Kalıcılık:** Keşfedilen her element, tarif önbelleği, istatistikler ve tuval
   durumu cihazda saklanır. Aynı ikili yapay zekâya yalnızca bir kez sorulur;
   A+B ile B+A aynı sonucu verir.
