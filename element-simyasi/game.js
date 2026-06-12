@@ -27,7 +27,7 @@ let COMMUNITY_RECIPES = {};
    otomatik bağlanır — oyuncuların hiçbir şey yapması gerekmez.
    Boşken havuz devre dışıdır; Ayarlar'daki alan kişisel havuz kullananlar
    için geçersiz kılma (override) görevi görür. */
-const DEFAULT_POOL_URL = "";
+const DEFAULT_POOL_URL = "https://simya-havuz.alituna5923.workers.dev";
 
 function activePoolUrl() {
 	return (Store.settings.poolUrl || DEFAULT_POOL_URL).replace(/\/+$/, "");
