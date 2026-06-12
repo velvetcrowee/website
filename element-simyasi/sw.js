@@ -1,6 +1,9 @@
-/* Çevrimdışı destek: uygulama kabuğunu önbelleğe alır; API istekleri ağa gider. */
+/* Çevrimdışı destek: uygulama dosyaları için "önce ağ" stratejisi kullanılır —
+   çevrimiçiyken her zaman en güncel sürüm getirilir (güncellemeler anında
+   görünür), ağ yoksa önbellekteki kopya sunulur. API istekleri her zaman ağa
+   gider. */
 
-const CACHE = "simya-v7";
+const CACHE = "simya-v8";
 const ASSETS = [
 	"./",
 	"./index.html",
@@ -33,14 +36,15 @@ self.addEventListener("fetch", (e) => {
 	const url = new URL(e.request.url);
 	// API istekleri ve diğer origin'ler her zaman ağa gider.
 	if (url.origin !== location.origin) return;
+	if (e.request.method !== "GET") return;
+	// Önce ağ: güncel kopyayı getir ve önbelleği tazele; ağ yoksa önbelleğe düş.
 	e.respondWith(
-		caches.match(e.request).then((cached) =>
-			cached ||
-			fetch(e.request).then((res) => {
+		fetch(e.request)
+			.then((res) => {
 				const copy = res.clone();
 				caches.open(CACHE).then((c) => c.put(e.request, copy));
 				return res;
 			})
-		)
+			.catch(() => caches.match(e.request).then((cached) => cached || Promise.reject()))
 	);
 });
