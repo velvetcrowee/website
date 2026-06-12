@@ -84,7 +84,7 @@ Panelden: Worker → **Settings → Variables and Secrets → Add → Secret**,
 isim: `DEEPSEEK_KEY`.
 
 Korumalar: sonuçlar önce havuzdan döner (tekrar sorular bedava), IP başına
-dakikada 15 yeni istek sınırı vardır ve `deepseek-chat` çok ucuz olduğu için
+dakikada 35 yeni istek sınırı vardır ve `deepseek-chat` çok ucuz olduğu için
 2$ bakiye ~binlerce birleşime yeter.
 
 ## Uçlar

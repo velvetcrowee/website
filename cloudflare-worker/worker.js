@@ -29,7 +29,7 @@ const DEEPSEEK_MODEL = "deepseek-chat";
 
 /* IP başına basit hız sınırı (izolat belleğinde, en iyi çaba):
    ortak anahtarın bakiyesini korur. */
-const RATE_LIMIT_PER_MIN = 15;
+const RATE_LIMIT_PER_MIN = 35;
 const rateMap = new Map();
 function rateLimited(ip) {
 	const now = Date.now();
