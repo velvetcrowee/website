@@ -1,5 +1,9 @@
 # 🌐 Element Simyası — Küresel Tarif Havuzu
 
+> **Önemli:** Bu kurulumu yalnızca **site sahibi, bir kez** yapar.
+> Oyuncuların Cloudflare ile hiçbir işi yoktur — site sahibi havuzu kurup
+> adresi oyuna yazdıktan sonra herkes **otomatik** bağlanır.
+
 Bu Worker, tüm oyuncuların yapay zekâ keşiflerini **tek bir küresel havuzda**
 toplar:
 
@@ -37,8 +41,23 @@ Cloudflare'in ücretsiz katmanı bu iş için fazlasıyla yeterlidir
    Komut size şöyle bir adres verir:
    `https://simya-havuz.<kullanici>.workers.dev`
 
-5. **Oyunda:** ⚙️ Ayarlar → "Küresel havuz adresi" alanına bu adresi
-   yapıştırın → Kaydet. Hepsi bu — artık keşifler havuzda birikir.
+5. **Adresi oyuna gömün (tek satır):** `element-simyasi/game.js` dosyasındaki
+
+   ```js
+   const DEFAULT_POOL_URL = "";
+   ```
+
+   satırına Worker adresinizi yazın:
+
+   ```js
+   const DEFAULT_POOL_URL = "https://simya-havuz.<kullanici>.workers.dev";
+   ```
+
+   Değişikliği master'a gönderin — site yeniden yayınlanır ve **tüm
+   oyuncular kendiliğinden havuza bağlanır**. Kimsenin ayar girmesi gerekmez.
+
+   > İpucu: Bu satırı kendiniz düzenlemek istemezseniz Worker adresini
+   > Claude'a söylemeniz yeterli; tek satırı yazıp yayınlar.
 
 > Komut satırı kullanmak istemezseniz: dash.cloudflare.com → **Workers &
 > Pages → Create Worker** deyip `worker.js` içeriğini editöre yapıştırın,

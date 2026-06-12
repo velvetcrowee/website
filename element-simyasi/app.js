@@ -567,6 +567,9 @@ function openSettings(hint = "") {
 	if (s.apiKey) $("#api-key-input").value = s.apiKey;
 	if (s.geminiKey) $("#gemini-key-input").value = s.geminiKey;
 	if (s.poolUrl) $("#pool-url-input").value = s.poolUrl;
+	$("#pool-status").textContent = activePoolUrl()
+		? "🌐 Küresel havuz bağlı — tüm oyuncuların keşifleri ortak bellekte birikiyor; sizin bir şey yapmanız gerekmiyor."
+		: "Havuz henüz kurulmadı. Site sahibi kurduğunda otomatik bağlanacaksınız — oyuncuların bir şey yapması gerekmez.";
 	$("#sound-toggle").checked = s.sound !== false;
 	const mem = Store.memory;
 	const learned = Object.keys(Store.recipes).length;

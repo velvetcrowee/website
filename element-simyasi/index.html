@@ -96,8 +96,12 @@
 				<p class="muted">Anahtar: <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a></p>
 			</div>
 			<h3>Küresel Havuz</h3>
-			<p class="muted">Cloudflare Worker adresi girilirse tüm oyuncuların keşifleri ortak havuzda birikir — aynı ikili dünyada bir kez sorulur. Kurulum: <code>cloudflare-worker/README.md</code></p>
-			<input type="url" id="pool-url-input" placeholder="https://simya-havuz.kullanici.workers.dev">
+			<p id="pool-status" class="muted"></p>
+			<details class="manual-entry">
+				<summary class="muted">Gelişmiş: farklı havuz adresi kullan</summary>
+				<p class="muted">Normalde bu alanla uğraşmanıza gerek yok — sitenin havuzu varsa otomatik bağlanırsınız. Yalnızca kendi Worker'ınızı kullanmak isterseniz adresini girin.</p>
+				<input type="url" id="pool-url-input" placeholder="https://simya-havuz.kullanici.workers.dev">
+			</details>
 			<button id="btn-save-key" class="btn primary full">Kaydet</button>
 			<p id="key-status" class="muted"></p>
 			<h3>Oyun</h3>

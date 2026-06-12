@@ -321,6 +321,10 @@ input:focus, select:focus { outline: 2px solid var(--accent-dark); }
 }
 .check-row input { width: auto; margin: 0; }
 
+details.manual-entry { margin-bottom: 10px; }
+details.manual-entry summary { cursor: pointer; padding: 4px 0; }
+details.manual-entry[open] summary { margin-bottom: 6px; }
+
 #book-list li, #detail-lineage li { cursor: pointer; }
 #detail-title { font-size: 1.4rem; }
 
