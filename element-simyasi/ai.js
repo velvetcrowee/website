@@ -13,13 +13,19 @@ const CLAUDE_MODEL = "claude-opus-4-8";
 const GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
 let geminiModelIdx = 0;
 
+const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_MODEL = "deepseek-chat";
+
 function activeProvider() {
 	return Store.settings.aiProvider || "gemini";
 }
 
 function activeKey() {
 	const s = Store.settings;
-	return activeProvider() === "gemini" ? (s.geminiKey || "") : (s.apiKey || "");
+	const p = activeProvider();
+	if (p === "gemini") return s.geminiKey || "";
+	if (p === "deepseek") return s.deepseekKey || "";
+	return s.apiKey || "";
 }
 
 /* ---------- Claude ---------- */
@@ -133,19 +139,76 @@ async function geminiRequest({ parts, schema, maxTokens, model }) {
 	return text;
 }
 
+/* ---------- DeepSeek (OpenAI uyumlu) ---------- */
+
+async function deepseekRequest({ prompt, schema, maxTokens }) {
+	const apiKey = Store.settings.deepseekKey;
+	if (!apiKey) {
+		throw new Error("NO_KEY");
+	}
+	// DeepSeek JSON modunda şema almaz; istenen yapı prompt'a yazılır ve
+	// response_format ile geçerli JSON garanti edilir.
+	const sys = "Yalnızca şu şemaya uyan geçerli bir JSON nesnesi döndür, başka hiçbir metin yazma: "
+		+ JSON.stringify(schema.properties) + " — zorunlu alanlar: " + (schema.required || []).join(", ") + ".";
+	const res = await fetch(DEEPSEEK_API_URL, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			"authorization": "Bearer " + apiKey,
+		},
+		body: JSON.stringify({
+			model: DEEPSEEK_MODEL,
+			messages: [
+				{ role: "system", content: sys },
+				{ role: "user", content: prompt },
+			],
+			response_format: { type: "json_object" },
+			max_tokens: maxTokens,
+		}),
+	});
+	if (!res.ok) {
+		let msg = `API hatası (${res.status})`;
+		try {
+			const err = await res.json();
+			if (err.error && err.error.message) msg = err.error.message;
+		} catch { /* gövde okunamadı */ }
+		if (res.status === 401) msg = "DeepSeek API anahtarı geçersiz. Ayarlar'dan kontrol edin.";
+		if (res.status === 402) msg = "DeepSeek bakiyeniz yetersiz. Hesabınıza kontör yükleyin.";
+		if (res.status === 429) msg = "DeepSeek istek limiti aşıldı, biraz bekleyip tekrar deneyin.";
+		const e = new Error(msg);
+		e.retryable = res.status === 429 || res.status === 503 || res.status === 500;
+		throw e;
+	}
+	const data = await res.json();
+	const text = data.choices?.[0]?.message?.content || "";
+	if (!text) throw new Error("Modelden yanıt alınamadı.");
+	return text;
+}
+
 /* ---------- Sağlayıcıdan bağımsız yardımcılar ---------- */
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* Tek bir JSON şemalı istek (yeniden deneme yok). */
 async function aiJsonOnce({ prompt, schema, maxTokens }) {
-	if (activeProvider() === "gemini") {
+	const provider = activeProvider();
+	if (provider === "gemini") {
 		const model = GEMINI_MODELS[geminiModelIdx % GEMINI_MODELS.length];
 		const raw = await geminiRequest({ parts: [{ text: prompt }], schema, maxTokens, model });
 		try {
 			return JSON.parse(raw);
 		} catch {
 			// Yarıda kesilmiş / bozuk JSON → yeniden denenebilir.
+			const e = new Error("Yanıt çözümlenemedi.");
+			e.retryable = true;
+			throw e;
+		}
+	}
+	if (provider === "deepseek") {
+		const raw = await deepseekRequest({ prompt, schema, maxTokens });
+		try {
+			return JSON.parse(raw);
+		} catch {
 			const e = new Error("Yanıt çözümlenemedi.");
 			e.retryable = true;
 			throw e;

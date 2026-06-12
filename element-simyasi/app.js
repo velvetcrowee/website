@@ -552,6 +552,7 @@ $("#detail-lineage").addEventListener("click", (ev) => {
 function syncProviderRows() {
 	const p = $("#ai-provider").value;
 	$("#gemini-key-row").hidden = p !== "gemini";
+	$("#deepseek-key-row").hidden = p !== "deepseek";
 	$("#claude-key-row").hidden = p !== "claude";
 }
 
@@ -566,6 +567,7 @@ function openSettings(hint = "") {
 	$("#ai-provider").value = s.aiProvider || "gemini";
 	if (s.apiKey) $("#api-key-input").value = s.apiKey;
 	if (s.geminiKey) $("#gemini-key-input").value = s.geminiKey;
+	if (s.deepseekKey) $("#deepseek-key-input").value = s.deepseekKey;
 	if (s.poolUrl) $("#pool-url-input").value = s.poolUrl;
 	$("#pool-status").textContent = activePoolUrl()
 		? "🌐 Küresel havuz bağlı — tüm oyuncuların keşifleri ortak bellekte birikiyor; sizin bir şey yapmanız gerekmiyor."
@@ -599,6 +601,7 @@ $("#btn-save-key").addEventListener("click", () => {
 		aiProvider: $("#ai-provider").value,
 		apiKey: $("#api-key-input").value.trim(),
 		geminiKey: $("#gemini-key-input").value.trim(),
+		deepseekKey: $("#deepseek-key-input").value.trim(),
 		poolUrl: newPool,
 	};
 	updateKeyStatus();
