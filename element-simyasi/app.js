@@ -559,7 +559,9 @@ function syncProviderRows() {
 function updateKeyStatus() {
 	$("#key-status").textContent = activeKey()
 		? "Anahtar kayıtlı ✓ — sınırsız birleşim açık."
-		: "Anahtar yok — yalnızca yerleşik tarifler çalışır.";
+		: (activePoolUrl()
+			? "Anahtar yok — sitenin ortak yapay zekâsı (havuz) üzerinden oynarsınız."
+			: "Anahtar yok — yalnızca yerleşik tarifler çalışır.");
 }
 
 function openSettings(hint = "") {

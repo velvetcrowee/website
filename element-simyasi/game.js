@@ -115,7 +115,8 @@ function validateResult(raw) {
 	if (!/\p{Extended_Pictographic}/u.test(emoji)) emoji = "✨";
 	const desc = String(raw?.desc || "").trim().slice(0, 160);
 	const validCats = CATEGORIES.map((c) => c.id);
-	const cat = validCats.includes(raw?.category) ? raw.category : (CATEGORY_MAP[norm(name)] || "diger");
+	const rawCat = raw?.category || raw?.cat; // istemci şeması "category", havuz "cat" kullanır
+	const cat = validCats.includes(rawCat) ? rawCat : (CATEGORY_MAP[norm(name)] || "diger");
 	// Bilinen bir element dönerse kayıtlı ad ve emojiyi kullan (dedup).
 	const existing = getElement(name);
 	if (existing) {
