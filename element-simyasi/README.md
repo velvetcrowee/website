@@ -35,9 +35,18 @@ elementler keşfedersiniz — Karadelik'e, Film'e ve ötesine kadar.
   kullanılır.
 - **Eğitim verisi:** Ayarlar'dan tüm öğrenilmiş + yerleşik tarifler, yapay zekâ
   ince ayarına hazır JSONL (sohbet biçimi) olarak dışa aktarılabilir.
-- **Rozetler ve soy ağacı:** Kilometre taşları rozet kazandırır; Keşif
-  Defteri'nde her elementin hikâyesi (açıklama) ve temel elementlere kadar inen
-  soy ağacı görüntülenir. WebAudio ile dosyasız ses efektleri vardır.
+- **Rozetler, kategoriler, hedefler ve soy ağacı:** Kilometre taşları rozet
+  kazandırır. Her element 9 kategoriden birine girer (Doğa, Canlılar, Yiyecek,
+  İnsan & Toplum, Teknoloji, Uzay, Mitoloji & Sihir, Kültür & Soyut, Diğer);
+  panelde kategoriye göre filtrelenir. Tuvalin köşesinde bir **hedef** gösterilir
+  — henüz bulunmamış bir elementi keşfetmeniz istenir, tamamlayınca kutlama ve
+  yeni hedef gelir. Keşif Defteri'nde her elementin hikâyesi, kategorisi ve
+  temel elementlere inen soy ağacı görüntülenir. WebAudio ile dosyasız ses
+  efektleri vardır.
+- **Küresel havuz (isteğe bağlı):** `cloudflare-worker/` altındaki Worker
+  kurulup adresi Ayarlar'a girilirse, tüm oyuncuların yapay zekâ keşifleri tek
+  bir küresel havuzda toplanır — aynı ikili dünyada yalnızca bir kez sorulur,
+  Gemini istekleri ciddi biçimde azalır. Kurulum: `cloudflare-worker/README.md`.
 
 ## Geliştirme
 

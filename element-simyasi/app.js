@@ -73,6 +73,14 @@ function announceResult(res) {
 	(res.newBadges || []).forEach((b, i) => {
 		setTimeout(() => { toast(`🎖️ Rozet kazandın: ${b.emoji} ${b.name}`, "gold", 4500); sfx("badge"); }, 900 + i * 1200);
 	});
+	if (res.questDone) {
+		setTimeout(() => {
+			toast(`🎯 Hedef tamamlandı: ${res.questDone.emoji} ${res.questDone.name}!`, "gold", 5000);
+			confetti();
+			sfx("badge");
+			renderQuest();
+		}, 600);
+	}
 	if (!res.discovered) { sfx("merge"); return; }
 	if (res.isNew) {
 		toast(`🏆 İlk Keşif: ${res.emoji} ${res.name}`, "gold", 4500);
@@ -103,11 +111,43 @@ function renderCount() {
 	$("#element-count").textContent = `${n} element`;
 }
 
+/* Aktif kategori filtresi ("" = tümü). */
+let activeCat = "";
+
+function renderCatFilter() {
+	const counts = {};
+	elementList().forEach((e) => {
+		const c = elementCategory(e);
+		counts[c] = (counts[c] || 0) + 1;
+	});
+	const bar = $("#cat-filter");
+	bar.innerHTML = "";
+	const mk = (id, label) => {
+		const b = document.createElement("button");
+		b.className = "cat-chip" + ((activeCat === id) ? " active" : "");
+		b.dataset.cat = id;
+		b.textContent = label;
+		bar.appendChild(b);
+	};
+	mk("", `Tümü ${Object.keys(Store.elements).length}`);
+	CATEGORIES.forEach((c) => {
+		if (counts[c.id]) mk(c.id, `${c.emoji} ${c.name} ${counts[c.id]}`);
+	});
+}
+
+$("#cat-filter").addEventListener("click", (ev) => {
+	const b = ev.target.closest(".cat-chip");
+	if (!b) return;
+	activeCat = b.dataset.cat;
+	renderChips();
+});
+
 function renderChips() {
 	const q = norm($("#search").value || "");
 	chipListEl.innerHTML = "";
 	elementList()
 		.filter((e) => !q || norm(e.name).includes(q))
+		.filter((e) => !activeCat || elementCategory(e) === activeCat)
 		.forEach((e) => {
 			const chip = document.createElement("button");
 			chip.className = "chip" + (freshNames.has(norm(e.name)) ? " fresh" : "");
@@ -116,6 +156,7 @@ function renderChips() {
 			chipListEl.appendChild(chip);
 		});
 	renderCount();
+	renderCatFilter();
 }
 
 function escapeHtml(s) {
@@ -172,7 +213,8 @@ function renderWsItem(item, pop = false) {
 }
 
 function renderWorkspace() {
-	workspaceEl.innerHTML = "";
+	// Yalnızca element örneklerini temizle; hedef çubuğu gibi sabitler kalsın.
+	workspaceEl.querySelectorAll(".ws-item").forEach((n) => n.remove());
 	wsItems.forEach((i) => renderWsItem(i));
 }
 
@@ -394,6 +436,23 @@ $("#slot-result").addEventListener("click", () => {
 
 $("#search").addEventListener("input", renderChips);
 
+/* ---------- Hedef göstergesi ---------- */
+
+function renderQuest() {
+	const q = currentQuest();
+	const bar = $("#quest-bar");
+	if (!q) { bar.hidden = true; return; }
+	const cat = categoryInfo(CATEGORY_MAP[norm(q.name)] || "diger");
+	$("#quest-text").textContent = `🎯 Hedef: ${q.emoji} ${q.name} (${cat.emoji} ${cat.name})`;
+	bar.hidden = false;
+}
+
+$("#quest-skip").addEventListener("click", () => {
+	DB.write("quest", pickQuest());
+	renderQuest();
+	toast("🎯 Yeni hedef belirlendi");
+});
+
 /* ---------- Başlık butonları ---------- */
 
 $("#btn-clear").addEventListener("click", () => {
@@ -460,8 +519,9 @@ function openDetail(name) {
 	$("#detail-desc").hidden = !e.desc;
 	const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 	const depth = elementDepth(e.name);
+	const cat = categoryInfo(elementCategory(e));
 	$("#detail-meta").textContent =
-		`${date} tarihinde keşfedildi · derinlik: ${depth}` + (e.firstDiscovery ? " · 🏆 İlk Keşif" : "");
+		`${cat.emoji} ${cat.name} · ${date} tarihinde keşfedildi · derinlik: ${depth}` + (e.firstDiscovery ? " · 🏆 İlk Keşif" : "");
 	const lin = $("#detail-lineage");
 	lin.innerHTML = "";
 	const steps = lineageSteps(e.name);
@@ -506,6 +566,7 @@ function openSettings(hint = "") {
 	$("#ai-provider").value = s.aiProvider || "gemini";
 	if (s.apiKey) $("#api-key-input").value = s.apiKey;
 	if (s.geminiKey) $("#gemini-key-input").value = s.geminiKey;
+	if (s.poolUrl) $("#pool-url-input").value = s.poolUrl;
 	$("#sound-toggle").checked = s.sound !== false;
 	const mem = Store.memory;
 	const learned = Object.keys(Store.recipes).length;
@@ -528,14 +589,24 @@ $("#btn-settings").addEventListener("click", () => openSettings());
 $("#ai-provider").addEventListener("change", syncProviderRows);
 
 $("#btn-save-key").addEventListener("click", () => {
+	const oldPool = Store.settings.poolUrl || "";
+	const newPool = $("#pool-url-input").value.trim();
 	Store.settings = {
 		...Store.settings,
 		aiProvider: $("#ai-provider").value,
 		apiKey: $("#api-key-input").value.trim(),
 		geminiKey: $("#gemini-key-input").value.trim(),
+		poolUrl: newPool,
 	};
 	updateKeyStatus();
 	toast("Ayarlar kaydedildi ✓");
+	// Havuz adresi değiştiyse hemen indir ve hedef adaylarını tazele.
+	if (newPool && newPool !== oldPool) {
+		loadCommunityRecipes().then(() => {
+			toast(`🌐 Havuz bağlandı: ${Object.keys(COMMUNITY_RECIPES).length} ortak tarif`);
+			renderQuest();
+		});
+	}
 });
 
 function downloadBlob(content, filename, type) {
@@ -609,8 +680,9 @@ $$(".modal").forEach((m) => {
 async function init() {
 	seedBaseElements();
 
-	// Paylaşılan topluluk tariflerini indir (oyun bu bittikten önce de oynanır).
-	loadCommunityRecipes();
+	// Paylaşılan topluluk tariflerini (ve varsa küresel havuzu) indir;
+	// hedef adayları buna bağlı olduğundan bitince hedef göstergesi tazelenir.
+	loadCommunityRecipes().then(renderQuest);
 
 	wsItems = Store.workspace;
 	wsIdSeq = wsItems.reduce((m, i) => Math.max(m, parseInt(i.id.slice(1)) || 0), 0) + 1;
