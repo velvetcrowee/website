@@ -1,11 +1,12 @@
 /* Çevrimdışı destek: uygulama kabuğunu önbelleğe alır; API istekleri ağa gider. */
 
-const CACHE = "simya-v4";
+const CACHE = "simya-v5";
 const ASSETS = [
 	"./",
 	"./index.html",
 	"./styles.css",
 	"./data.js",
+	"./categories.js",
 	"./seed.js",
 	"./ai.js",
 	"./game.js",

@@ -1,0 +1,8 @@
+name = "simya-havuz"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+
+# `wrangler kv namespace create RECIPES` komutunun verdiği id'yi buraya yazın.
+[[kv_namespaces]]
+binding = "RECIPES"
+id = "KV_NAMESPACE_ID_BURAYA"

@@ -201,8 +201,13 @@ const COMBINE_SCHEMA = {
 		emoji: { type: "string", description: "Kavramı en iyi anlatan TEK emoji" },
 		isNew: { type: "boolean", description: "Sıra dışı/yaratıcı bir kavramsa true, bilinen temel bir birleşimse false" },
 		desc: { type: "string", description: "Sonucu bir cümleyle anlatan kısa Türkçe açıklama" },
+		category: {
+			type: "string",
+			enum: ["doga", "canli", "yiyecek", "insan", "teknoloji", "uzay", "mitoloji", "soyut"],
+			description: "Sonucun kategorisi: doga(doğa), canli(canlılar), yiyecek, insan(insan&toplum), teknoloji, uzay, mitoloji(mitoloji&sihir), soyut(kültür&soyut)",
+		},
 	},
-	required: ["name", "emoji", "isNew", "desc"],
+	required: ["name", "emoji", "isNew", "desc", "category"],
 };
 
 /* Oyunun belleğinden prompt'a bağlam üretir: son keşifler ve oyuncunun
@@ -240,6 +245,7 @@ function combinePrompt(a, b) {
 		"6. emoji alanına kavramı en iyi anlatan TEK emoji yaz.",
 		"7. isNew: sonuç sıra dışı/şaşırtıcı yeni bir buluşsa true, herkesin bileceği temel bir birleşimse false.",
 		"8. desc alanına sonucu bir cümleyle anlatan kısa, eğlenceli bir Türkçe açıklama yaz.",
+		"9. category alanına sonucun en uygun kategorisini yaz.",
 		"",
 		memoryContext(),
 		"",
@@ -255,10 +261,12 @@ function mockEnabled() {
 
 function mockCombine(a, b) {
 	const name = `${a.name}-${b.name} Karışımı`.slice(0, 40);
+	const cats = ["doga", "canli", "teknoloji", "uzay", "mitoloji", "soyut"];
 	return {
 		name, emoji: "🧪",
 		isNew: (norm(a.name) + norm(b.name)).length % 3 === 0,
 		desc: `${a.name} ile ${b.name} deney tüpünde buluştu.`,
+		category: cats[(norm(a.name) + norm(b.name)).length % cats.length],
 	};
 }
 

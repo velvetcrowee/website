@@ -22,7 +22,12 @@
 	</header>
 
 	<main id="game">
-		<div id="workspace"></div>
+		<div id="workspace">
+			<div id="quest-bar" hidden>
+				<span id="quest-text"></span>
+				<button id="quest-skip" class="del" title="Yeni hedef">↻</button>
+			</div>
+		</div>
 		<aside id="panel">
 			<!-- Mobil birleştirme çubuğu: [A] + [B] = [?] -->
 			<div id="combiner">
@@ -33,6 +38,7 @@
 				<button id="slot-result" class="slot result" data-name="">?</button>
 			</div>
 			<input type="search" id="search" placeholder="🔍 Ara…" autocomplete="off">
+			<div id="cat-filter"></div>
 			<div id="chip-list"></div>
 		</aside>
 	</main>
@@ -89,6 +95,9 @@
 				<input type="password" id="api-key-input" placeholder="Claude anahtarı (sk-ant-...)">
 				<p class="muted">Anahtar: <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a></p>
 			</div>
+			<h3>Küresel Havuz</h3>
+			<p class="muted">Cloudflare Worker adresi girilirse tüm oyuncuların keşifleri ortak havuzda birikir — aynı ikili dünyada bir kez sorulur. Kurulum: <code>cloudflare-worker/README.md</code></p>
+			<input type="url" id="pool-url-input" placeholder="https://simya-havuz.kullanici.workers.dev">
 			<button id="btn-save-key" class="btn primary full">Kaydet</button>
 			<p id="key-status" class="muted"></p>
 			<h3>Oyun</h3>
@@ -109,6 +118,7 @@
 	<div id="confetti-area"></div>
 
 	<script src="data.js"></script>
+	<script src="categories.js"></script>
 	<script src="seed.js"></script>
 	<script src="ai.js"></script>
 	<script src="game.js"></script>

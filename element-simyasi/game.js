@@ -27,7 +27,37 @@ async function loadCommunityRecipes() {
 		const res = await fetch("recipes.json", { cache: "no-cache" });
 		if (res.ok) COMMUNITY_RECIPES = await res.json();
 	} catch { /* çevrimdışı veya bulunamadı — yerleşik tarifler yeter */ }
+	// Küresel havuz (Cloudflare Worker) ayarlıysa onu da kat: tüm oyuncuların
+	// AI keşifleri tek havuzda birikir, aynı ikili dünyada bir kez sorulur.
+	const poolUrl = (Store.settings.poolUrl || "").replace(/\/+$/, "");
+	if (poolUrl) {
+		try {
+			const res = await fetch(poolUrl + "/pack");
+			if (res.ok) {
+				const pack = await res.json();
+				// Yerel küratörlü paket önceliklidir; havuz boşlukları doldurur.
+				COMMUNITY_RECIPES = { ...pack, ...COMMUNITY_RECIPES };
+			}
+		} catch { /* havuza ulaşılamadı — oyun yereliyle devam eder */ }
+	}
 	return COMMUNITY_RECIPES;
+}
+
+/* Yapay zekânın ürettiği yeni tarifi küresel havuza gönderir (beklemeden). */
+function pushToPool(key, result) {
+	const poolUrl = (Store.settings.poolUrl || "").replace(/\/+$/, "");
+	if (!poolUrl) return;
+	fetch(poolUrl + "/recipe", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ key, result }),
+	}).catch(() => { /* havuz isteğe bağlı */ });
+}
+
+/* Elementin kategorisi: kayıtlı alan → bilinen harita → diğer. */
+function elementCategory(e) {
+	if (!e) return "diger";
+	return e.cat || CATEGORY_MAP[norm(e.name)] || "diger";
 }
 
 /* Yapay zekâ çağrısı yapmadan, bilinen kaynaklardan tarif bul. */
@@ -73,13 +103,15 @@ function validateResult(raw) {
 	let emoji = String(raw?.emoji || "").trim();
 	if (!/\p{Extended_Pictographic}/u.test(emoji)) emoji = "✨";
 	const desc = String(raw?.desc || "").trim().slice(0, 160);
+	const validCats = CATEGORIES.map((c) => c.id);
+	const cat = validCats.includes(raw?.category) ? raw.category : (CATEGORY_MAP[norm(name)] || "diger");
 	// Bilinen bir element dönerse kayıtlı ad ve emojiyi kullan (dedup).
 	const existing = getElement(name);
 	if (existing) {
 		name = existing.name;
 		emoji = existing.emoji;
 	}
-	return { name, emoji, isNew: !!raw?.isNew, desc };
+	return { name, emoji, isNew: !!raw?.isNew, desc, cat };
 }
 
 /* ---------- Oyun belleği ---------- */
@@ -113,7 +145,33 @@ const BADGES = [
 	{ id: "oncu", emoji: "🏆", name: "Öncü", goal: "Sıra dışı bir 'ilk keşif' yap", test: (s, ctx) => !!ctx.firstDiscovery },
 	{ id: "derin", emoji: "🌀", name: "Derin Simya", goal: "5 adım derinlikte bir element üret", test: (s, ctx) => ctx.depth >= 5 },
 	{ id: "dipsiz", emoji: "🕳️", name: "Dipsiz Kuyu", goal: "10 adım derinlikte bir element üret", test: (s, ctx) => ctx.depth >= 10 },
+	{ id: "avci", emoji: "🎯", name: "Hedef Avcısı", goal: "İlk hedefini tamamla", test: (s) => (s.quests || 0) >= 1 },
+	{ id: "keskin", emoji: "🏹", name: "Keskin Nişancı", goal: "10 hedef tamamla", test: (s) => (s.quests || 0) >= 10 },
+	{ id: "cokyonlu", emoji: "🌈", name: "Çok Yönlü", goal: "8 farklı kategoriden element keşfet", test: (s, ctx) => ctx.catCount >= 8 },
 ];
+
+/* ---------- Hedef görevi ---------- */
+
+/* Henüz keşfedilmemiş, tariflerle ulaşılabilir bir element hedef seçilir.
+   Oyuncu onu bulunca kutlama + yeni hedef gelir — oyuna amaç katar. */
+function pickQuest() {
+	const pool = { ...SEED_RECIPES, ...COMMUNITY_RECIPES };
+	const candidates = [...new Set(Object.values(pool).map((r) => r.name))]
+		.filter((n) => !getElement(n));
+	if (!candidates.length) return null;
+	const pick = candidates[Math.floor(Math.random() * candidates.length)];
+	const recipe = Object.values(pool).find((r) => r.name === pick);
+	return { name: pick, emoji: recipe?.emoji || "🎯", setAt: new Date().toISOString() };
+}
+
+function currentQuest() {
+	let q = DB.read("quest", null);
+	if (!q || getElement(q.name)) {
+		q = pickQuest();
+		DB.write("quest", q);
+	}
+	return q;
+}
 
 /* Yeni kazanılan rozetleri kaydedip döndürür. */
 function checkBadges(ctx) {
@@ -152,6 +210,8 @@ async function combine(nameA, nameB) {
 			const stats = Store.stats;
 			stats.aiCalls += 1;
 			Store.stats = stats;
+			// Keşfi küresel havuza paylaş (varsa) — diğer oyuncular da öğrenir.
+			pushToPool(key, result);
 		}
 
 		const stats = Store.stats;
@@ -163,6 +223,7 @@ async function combine(nameA, nameB) {
 			els[norm(result.name)] = {
 				name: result.name, emoji: result.emoji,
 				desc: result.desc || "",
+				cat: result.cat || CATEGORY_MAP[norm(result.name)] || "diger",
 				discoveredAt: new Date().toISOString(),
 				firstDiscovery: !!result.isNew,
 				fromPair: [a.name, b.name],
@@ -170,6 +231,17 @@ async function combine(nameA, nameB) {
 			Store.elements = els;
 			stats.discoveries += 1;
 			discovered = true;
+		}
+
+		// Hedef tamamlandı mı?
+		let questDone = null;
+		if (discovered) {
+			const q = DB.read("quest", null);
+			if (q && norm(q.name) === norm(result.name)) {
+				stats.quests = (stats.quests || 0) + 1;
+				questDone = q;
+				DB.write("quest", pickQuest());
+			}
 		}
 		Store.stats = stats;
 
@@ -183,12 +255,15 @@ async function combine(nameA, nameB) {
 			source,
 		});
 
+		const catCount = new Set(Object.values(Store.elements).map((e) => elementCategory(e)))
+			.size - (Object.values(Store.elements).some((e) => elementCategory(e) === "diger") ? 1 : 0);
 		const newBadges = checkBadges({
 			firstDiscovery: discovered && !!result.isNew,
 			depth: discovered ? elementDepth(result.name) : 0,
+			catCount,
 		});
 
-		return { ...result, discovered, newBadges };
+		return { ...result, discovered, newBadges, questDone };
 	} finally {
 		inFlight.delete(key);
 	}
