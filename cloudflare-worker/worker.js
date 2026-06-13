@@ -58,6 +58,30 @@ function pairKey(a, b) {
 	return [norm(a), norm(b)].sort((x, y) => x.localeCompare(y, "tr")).join("++");
 }
 
+/* ---------- Üyelik (benzersiz kullanıcı adı) ---------- */
+
+async function sha256(s) {
+	const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+	return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function validUsername(u) {
+	return typeof u === "string" && /^[A-Za-z0-9_çğıöşüÇĞİÖŞÜ]{3,20}$/.test(u);
+}
+
+function randomToken() {
+	return (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + "" + Math.random())).replace(/-/g, "");
+}
+
+/* token → kullanıcı adı (doğrulanmış kimlik). */
+async function resolveUser(env, token) {
+	if (!token || typeof token !== "string") return null;
+	const uname = await env.RECIPES.get("tok:" + token);
+	if (!uname) return null;
+	const acc = await env.RECIPES.get("user:" + uname, "json");
+	return acc ? acc.username : null;
+}
+
 /* İstemciden gelen veri güvensizdir: anahtar ve alanlar sıkıca doğrulanır. */
 function sanitize(key, result) {
 	if (typeof key !== "string" || key.length > 90) return null;
@@ -84,6 +108,49 @@ export default {
 		if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 		const url = new URL(req.url);
 
+		/* ---------- Üyelik ---------- */
+
+		if (url.pathname === "/register" && req.method === "POST") {
+			let body;
+			try { body = await req.json(); } catch { return json({ error: "Geçersiz JSON" }, 400); }
+			const username = String(body?.username || "").trim();
+			const password = String(body?.password || "");
+			if (!validUsername(username)) return json({ error: "Kullanıcı adı 3-20 karakter olmalı (harf, rakam, _)." }, 400);
+			if (password.length < 4) return json({ error: "Şifre en az 4 karakter olmalı." }, 400);
+			const lower = norm(username);
+			const existing = await env.RECIPES.get("user:" + lower, "json");
+			if (existing) return json({ error: "Bu kullanıcı adı alınmış, başka bir tane deneyin." }, 409);
+			const salt = randomToken();
+			const hash = await sha256(salt + password);
+			const acc = { username, salt, hash, userId: String(body?.userId || "").slice(0, 40), createdAt: new Date().toISOString() };
+			await env.RECIPES.put("user:" + lower, JSON.stringify(acc));
+			const token = randomToken();
+			await env.RECIPES.put("tok:" + token, lower, { expirationTtl: 60 * 60 * 24 * 365 });
+			return json({ ok: true, token, username });
+		}
+
+		if (url.pathname === "/login" && req.method === "POST") {
+			let body;
+			try { body = await req.json(); } catch { return json({ error: "Geçersiz JSON" }, 400); }
+			const username = String(body?.username || "").trim();
+			const password = String(body?.password || "");
+			const lower = norm(username);
+			const acc = await env.RECIPES.get("user:" + lower, "json");
+			if (!acc) return json({ error: "Kullanıcı bulunamadı." }, 404);
+			const hash = await sha256(acc.salt + password);
+			if (hash !== acc.hash) return json({ error: "Şifre yanlış." }, 401);
+			const token = randomToken();
+			await env.RECIPES.put("tok:" + token, lower, { expirationTtl: 60 * 60 * 24 * 365 });
+			return json({ ok: true, token, username: acc.username });
+		}
+
+		if (url.pathname === "/checkname" && req.method === "GET") {
+			const username = String(url.searchParams.get("u") || "").trim();
+			if (!validUsername(username)) return json({ available: false, error: "Geçersiz ad" });
+			const existing = await env.RECIPES.get("user:" + norm(username), "json");
+			return json({ available: !existing });
+		}
+
 		if (url.pathname === "/pack" && req.method === "GET") {
 			const pack = (await env.RECIPES.get("pack", "json")) || {};
 			return json(pack);
@@ -92,8 +159,11 @@ export default {
 		if (url.pathname === "/recipe" && req.method === "POST") {
 			let body;
 			try { body = await req.json(); } catch { return json({ error: "Geçersiz JSON" }, 400); }
-			// İlk keşfeden bilgisini gövdeden tarife taşı (istemci ayrı gönderir).
-			const incoming = { ...(body?.result || {}), by: body?.by ?? body?.result?.by, at: body?.at ?? body?.result?.at };
+			// İlk keşfeden: doğrulanmış kullanıcı adı (token) varsa o esas alınır,
+			// yoksa istemcinin gönderdiği takma ad (misafir) kullanılır.
+			const authedUser = await resolveUser(env, body?.token);
+			const credit = authedUser || body?.by || body?.result?.by;
+			const incoming = { ...(body?.result || {}), by: credit, at: body?.at ?? body?.result?.at };
 			const clean = sanitize(body?.key, incoming);
 			if (!clean) return json({ error: "Geçersiz tarif" }, 400);
 
@@ -178,8 +248,10 @@ export default {
 			try { raw = JSON.parse(data.choices?.[0]?.message?.content || ""); }
 			catch { return json({ error: "Yapay zekâ yanıtı çözümlenemedi" }, 502); }
 
-			// İlk keşfeden: isteği yapan oyuncunun takma adı + şimdiki zaman.
-			const finder = String(body?.finder || "").trim().replace(/[<>]/g, "").slice(0, 24);
+			// İlk keşfeden: doğrulanmış kullanıcı (token) önceliklidir, yoksa
+			// gönderilen misafir takma adı kullanılır.
+			const authed = await resolveUser(env, body?.token);
+			const finder = (authed || String(body?.finder || "")).trim().replace(/[<>]/g, "").slice(0, 24);
 			const clean = sanitize(key, {
 				...raw, cat: raw.category || raw.cat,
 				by: finder, at: new Date().toISOString(),

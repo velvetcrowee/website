@@ -258,6 +258,13 @@ document.addEventListener("pointerdown", (ev) => {
 	drag.moved = false;
 	drag.startX = ev.clientX;
 	drag.startY = ev.clientY;
+	drag.pointerId = ev.pointerId;
+	// Pointer capture yalnızca farede: masaüstünde panelden tuvale sürükleme
+	// fare hızlı gitse de kesilmez. Dokunmatikte kapatılır ki panel listesi
+	// parmakla normal şekilde kaydırılabilsin (touch-action: pan-y).
+	if (ev.pointerType === "mouse") {
+		try { (chip || wsItem).setPointerCapture(ev.pointerId); } catch { /* desteklenmiyor */ }
+	}
 
 	if (chip) {
 		drag.type = "chip";
@@ -576,10 +583,49 @@ function updateKeyStatus() {
 			: "Anahtar yok — yalnızca yerleşik tarifler çalışır.");
 }
 
+/* ---------- Üyelik ---------- */
+
+function renderAccount() {
+	const inEl = $("#account-loggedin"), outEl = $("#account-loggedout");
+	if (isLoggedIn()) {
+		inEl.hidden = false;
+		outEl.hidden = true;
+		$("#account-line").textContent = "👤 Giriş yapıldı: " + getAccount().username;
+	} else {
+		inEl.hidden = true;
+		outEl.hidden = false;
+	}
+}
+
+async function doAuth(kind) {
+	const username = $("#auth-username").value.trim();
+	const password = $("#auth-password").value;
+	$("#auth-status").textContent = "İşleniyor…";
+	try {
+		const name = kind === "register"
+			? await registerAccount(username, password)
+			: await loginAccount(username, password);
+		$("#auth-status").textContent = "";
+		$("#auth-password").value = "";
+		renderAccount();
+		toast(`👤 Hoş geldin, ${name}!`);
+	} catch (err) {
+		$("#auth-status").textContent = err.message;
+	}
+}
+
+$("#btn-register").addEventListener("click", () => doAuth("register"));
+$("#btn-login").addEventListener("click", () => doAuth("login"));
+$("#btn-logout").addEventListener("click", () => {
+	logoutAccount();
+	renderAccount();
+	toast("Çıkış yapıldı");
+});
+
 function openSettings(hint = "") {
 	const s = Store.settings;
-	$("#nickname-input").value = getNickname();
-	$("#uid-line").textContent = "Kimliğiniz: " + getUserId();
+	renderAccount();
+	$("#uid-line").textContent = "Cihaz kimliği: " + getUserId();
 	$("#ai-provider").value = s.aiProvider || "gemini";
 	if (s.apiKey) $("#api-key-input").value = s.apiKey;
 	if (s.geminiKey) $("#gemini-key-input").value = s.geminiKey;
@@ -612,10 +658,8 @@ $("#ai-provider").addEventListener("change", syncProviderRows);
 $("#btn-save-key").addEventListener("click", () => {
 	const oldPool = Store.settings.poolUrl || "";
 	const newPool = $("#pool-url-input").value.trim();
-	const nick = $("#nickname-input").value.trim().replace(/[<>]/g, "").slice(0, 24);
 	Store.settings = {
 		...Store.settings,
-		nickname: nick,
 		aiProvider: $("#ai-provider").value,
 		apiKey: $("#api-key-input").value.trim(),
 		geminiKey: $("#gemini-key-input").value.trim(),

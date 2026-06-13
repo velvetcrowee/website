@@ -82,9 +82,21 @@
 				<button class="del modal-close">✕</button>
 			</div>
 			<p id="settings-hint" class="muted accent-text" hidden></p>
-			<h3>Profil</h3>
-			<p class="muted">Takma adınız, bir elementi dünyada ilk keşfettiğinizde herkese görünür.</p>
-			<input type="text" id="nickname-input" maxlength="24" placeholder="Takma ad (örn. Simyacı123)">
+			<h3>Profil & Üyelik</h3>
+			<div id="account-loggedout">
+				<p class="muted">Benzersiz bir kullanıcı adı alın — bir elementi dünyada ilk keşfettiğinizde adınız herkese görünür. Kimse aynı adı alamaz.</p>
+				<input type="text" id="auth-username" maxlength="20" placeholder="Kullanıcı adı (3-20 karakter)" autocomplete="username">
+				<input type="password" id="auth-password" placeholder="Şifre (en az 4 karakter)" autocomplete="current-password">
+				<div class="row">
+					<button id="btn-register" class="btn primary grow">Kayıt ol</button>
+					<button id="btn-login" class="btn grow">Giriş yap</button>
+				</div>
+				<p id="auth-status" class="muted"></p>
+			</div>
+			<div id="account-loggedin" hidden>
+				<p id="account-line" class="accent-text"></p>
+				<button id="btn-logout" class="btn full">Çıkış yap</button>
+			</div>
 			<p id="uid-line" class="muted"></p>
 			<h3>Yapay Zekâ</h3>
 			<p class="muted">Bilinmeyen birleşimleri yapay zekâ üretir — olasılıklar sınırsızdır. Anahtarlar yalnızca bu cihazda saklanır.</p>

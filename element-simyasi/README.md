@@ -21,10 +21,15 @@ elementler keşfedersiniz — Karadelik'e, Film'e ve ötesine kadar.
   prompt'u bu bellekle beslenir: son keşifler ve oyuncunun kendi tarifleri
   bağlama eklenir, keşif sayısı arttıkça yaratıcılık seviyesi yükselir — oyun
   oynandıkça gelişir.
-- **İlk keşfeden:** Bir elementi dünyada ilk keşfeden oyuncunun takma adı ve
-  tarihi havuzda kalıcı kaydedilir; element detayında ve keşif defterinde
-  "🥇 İlk bulan: …" olarak görünür. Takma adınızı Ayarlar → Profil'den
-  belirlersiniz (her oyuncunun ayrıca benzersiz bir kimliği vardır).
+- **Üyelik (benzersiz kullanıcı adı):** Ayarlar → Profil'den kullanıcı adı +
+  şifre ile kayıt olunur; havuz sunucusu adların benzersiz olmasını garanti
+  eder (kimse aynı adı alamaz). Giriş yapıldığında bu ad, ilk keşiflerde
+  kimliğiniz olur. Şifreler sunucuda tuzlanmış SHA-256 ile saklanır, düz metin
+  tutulmaz. Üye olmadan da misafir olarak oynanabilir.
+- **İlk keşfeden:** Bir elementi dünyada ilk keşfeden oyuncunun adı ve tarihi
+  havuzda kalıcı kaydedilir; element detayında ve keşif defterinde
+  "🥇 İlk bulan: …" olarak görünür. Giriş yapıldıysa kimlik token ile
+  sunucuda doğrulanır (sahte ad gönderilemez).
 - **Paylaşılan topluluk belleği:** `recipes.json` repoda barınan, tüm
   oyuncuların açılışta indirdiği ortak tarif paketidir (~130 yaygın birleşim).
   Çözümleme sırası: yerleşik → topluluk → oyuncunun önbelleği → yapay zekâ. Yani

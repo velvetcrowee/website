@@ -333,6 +333,40 @@ function mockCombine(a, b) {
 	};
 }
 
+/* ---------- Üyelik (havuz sunucusu üzerinden) ---------- */
+
+async function accountRequest(path, payload) {
+	const poolUrl = typeof activePoolUrl === "function" ? activePoolUrl() : "";
+	if (!poolUrl) throw new Error("Üyelik için havuz sunucusu gerekli — site sahibine bildirin.");
+	const res = await fetch(poolUrl + path, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(payload),
+	});
+	let data = {};
+	try { data = await res.json(); } catch { /* gövde yok */ }
+	if (!res.ok) throw new Error(data.error || `Sunucu hatası (${res.status})`);
+	return data;
+}
+
+/* Yeni hesap oluşturur; benzersiz kullanıcı adını sunucu garanti eder. */
+async function registerAccount(username, password) {
+	const data = await accountRequest("/register", { username, password, userId: getUserId() });
+	DB.write("account", { token: data.token, username: data.username });
+	return data.username;
+}
+
+/* Var olan hesaba giriş yapar. */
+async function loginAccount(username, password) {
+	const data = await accountRequest("/login", { username, password });
+	DB.write("account", { token: data.token, username: data.username });
+	return data.username;
+}
+
+function logoutAccount() {
+	DB.remove("account");
+}
+
 /* Ortak yapay zekâ: oyuncunun kendi anahtarı yoksa istek, havuz sunucusuna
    gider — DeepSeek anahtarı sunucuda gizli tutulur, tarayıcıya asla inmez. */
 async function poolCombine(poolUrl, a, b) {
@@ -344,6 +378,7 @@ async function poolCombine(poolUrl, a, b) {
 			b: { name: b.name, emoji: b.emoji },
 			finder: getNickname(),
 			finderId: getUserId(),
+			token: getToken(),
 		}),
 	});
 	if (!res.ok) {
