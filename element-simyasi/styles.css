@@ -45,9 +45,18 @@ body {
 	z-index: 10;
 }
 
-.app-header h1 { font-size: 1.1rem; color: var(--accent); white-space: nowrap; }
-#element-count { color: var(--muted); font-size: 0.85rem; flex: 1; }
-.header-btns { display: flex; gap: 6px; }
+.app-header h1 {
+	font-size: 1.1rem;
+	color: var(--accent);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+	flex-shrink: 1;
+}
+#element-count { color: var(--muted); font-size: 0.85rem; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Butonlar asla kesilmesin; başlık gerekirse kısalsın. */
+.header-btns { display: flex; gap: 6px; flex-shrink: 0; }
 
 /* ---------- Oyun alanı ---------- */
 
