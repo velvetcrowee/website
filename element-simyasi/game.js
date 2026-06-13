@@ -44,7 +44,8 @@ async function loadCommunityRecipes() {
 	const poolUrl = activePoolUrl();
 	if (poolUrl) {
 		try {
-			const res = await fetch(poolUrl + "/pack");
+			// no-store: tarayıcı/CDN önbelleğe almasın, sayaçlar tazelensin.
+			const res = await fetch(poolUrl + "/pack?t=" + Date.now(), { cache: "no-store" });
 			if (res.ok) {
 				const pack = await res.json();
 				// Yerel küratörlü paket önceliklidir; havuz boşlukları doldurur.
@@ -52,7 +53,28 @@ async function loadCommunityRecipes() {
 			}
 		} catch { /* havuza ulaşılamadı — oyun yereliyle devam eder */ }
 	}
+	reconcileElements();
 	return COMMUNITY_RECIPES;
+}
+
+/* Tutarlılık: keşfedilen elementlerin emoji/kategorisini paylaşılan kanonik
+   tarife (seed → recipes.json → havuz) eşitler. Böylece aynı element herkeste
+   aynı emojiyle görünür — farklı oyuncuların yereldeki farklı AI çıktıları
+   havuzun ilk-yazan sürümüne yakınsar. */
+function reconcileElements() {
+	const canon = {};
+	for (const r of Object.values(COMMUNITY_RECIPES)) {
+		if (r && r.name && !canon[norm(r.name)]) canon[norm(r.name)] = r;
+	}
+	const els = Store.elements;
+	let changed = false;
+	for (const k of Object.keys(els)) {
+		const c = canon[k];
+		if (!c) continue;
+		if (c.emoji && els[k].emoji !== c.emoji) { els[k].emoji = c.emoji; changed = true; }
+		if (c.cat && els[k].cat !== c.cat) { els[k].cat = c.cat; changed = true; }
+	}
+	if (changed) Store.elements = els;
 }
 
 /* Yapay zekânın ürettiği yeni tarifi küresel havuza gönderir (beklemeden).
