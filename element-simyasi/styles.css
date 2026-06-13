@@ -15,9 +15,14 @@
 
 [hidden] { display: none !important; }
 
-html, body { height: 100%; height: 100dvh; }
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 
+/* Uygulamayı görünür alana sabitle: sayfa hiç kaydırılmaz, bu yüzden mobil
+   tarayıcı (Opera GX vb.) adres çubuğunu açıp kapatmaz ve düzen küçülüp
+   bozulmaz. Kaydırma yalnızca içteki element listesinde olur. */
 body {
+	position: fixed;
+	inset: 0;
 	font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	background: var(--bg);
 	color: var(--text);
@@ -130,6 +135,8 @@ body {
 #chip-list {
 	flex: 1;
 	overflow-y: auto;
+	overscroll-behavior: contain;
+	-webkit-overflow-scrolling: touch;
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
@@ -262,6 +269,7 @@ body {
 	max-width: 480px;
 	max-height: 85vh;
 	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 
 .modal-card h2 { font-size: 1.05rem; }
@@ -428,10 +436,11 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 
 @media (orientation: portrait) {
 	#game { flex-direction: column; }
-	#workspace { flex: none; height: 34dvh; min-height: 150px; }
+	/* Yüzde tabanlı bölünme (vh/dvh değil) — sabit yükseklikli gövdede stabil. */
+	#workspace { flex: 0 0 34%; }
 	#panel {
 		width: 100%;
-		flex: 1;
+		flex: 1 1 0;
 		min-height: 0;
 		border-left: none;
 		border-top: 1px solid #334155;
