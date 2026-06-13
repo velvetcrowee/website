@@ -487,7 +487,8 @@ $("#btn-book").addEventListener("click", () => {
 		li.dataset.name = e.name;
 		const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
 		const from = e.fromPair ? `${e.fromPair[0]} + ${e.fromPair[1]}` : "başlangıç";
-		li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}</span>
+		const first = e.firstBy ? ` <span class="first-tag">🥇 ${escapeHtml(e.firstBy)}</span>` : "";
+		li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}${first}</span>
 			<span class="sub">${escapeHtml(from)} — ${date}</span>`;
 		list.appendChild(li);
 	});
@@ -517,6 +518,17 @@ function openDetail(name) {
 	$("#detail-title").textContent = `${e.emoji} ${e.name}`;
 	$("#detail-desc").textContent = e.desc || "";
 	$("#detail-desc").hidden = !e.desc;
+	// Dünyada ilk keşfeden kişi + tarih (havuzdan).
+	const firstEl = $("#detail-first");
+	if (e.firstBy) {
+		const fdate = e.firstAt
+			? " · " + new Date(e.firstAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })
+			: "";
+		firstEl.textContent = `🥇 İlk bulan: ${e.firstBy}${fdate}`;
+		firstEl.hidden = false;
+	} else {
+		firstEl.hidden = true;
+	}
 	const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 	const depth = elementDepth(e.name);
 	const cat = categoryInfo(elementCategory(e));
@@ -566,6 +578,8 @@ function updateKeyStatus() {
 
 function openSettings(hint = "") {
 	const s = Store.settings;
+	$("#nickname-input").value = getNickname();
+	$("#uid-line").textContent = "Kimliğiniz: " + getUserId();
 	$("#ai-provider").value = s.aiProvider || "gemini";
 	if (s.apiKey) $("#api-key-input").value = s.apiKey;
 	if (s.geminiKey) $("#gemini-key-input").value = s.geminiKey;
@@ -598,8 +612,10 @@ $("#ai-provider").addEventListener("change", syncProviderRows);
 $("#btn-save-key").addEventListener("click", () => {
 	const oldPool = Store.settings.poolUrl || "";
 	const newPool = $("#pool-url-input").value.trim();
+	const nick = $("#nickname-input").value.trim().replace(/[<>]/g, "").slice(0, 24);
 	Store.settings = {
 		...Store.settings,
+		nickname: nick,
 		aiProvider: $("#ai-provider").value,
 		apiKey: $("#api-key-input").value.trim(),
 		geminiKey: $("#gemini-key-input").value.trim(),

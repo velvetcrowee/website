@@ -292,6 +292,19 @@ input:focus, select:focus { outline: 2px solid var(--accent-dark); }
 .stat b { display: block; font-size: 1.2rem; color: var(--accent); }
 .stat span { font-size: 0.72rem; color: var(--muted); }
 
+.detail-first {
+	color: var(--gold);
+	font-size: 0.9rem;
+	margin-bottom: 8px;
+	font-weight: 600;
+}
+.first-tag {
+	color: var(--gold);
+	font-size: 0.72rem;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
 #badge-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));

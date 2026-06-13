@@ -11,7 +11,8 @@ let aiQueue = Promise.resolve();
 function enqueueAi(task) {
 	const run = aiQueue.then(task, task);
 	// Kuyruğun bir sonraki işe geçmeden önce kısa nefes alması (limit dostu).
-	aiQueue = run.then(() => sleepGame(350), () => sleepGame(350));
+	// Düşük tutuldu: hızlı oynamak için sıradaki istek çabuk başlasın.
+	aiQueue = run.then(() => sleepGame(120), () => sleepGame(120));
 	return run;
 }
 const sleepGame = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -54,14 +55,15 @@ async function loadCommunityRecipes() {
 	return COMMUNITY_RECIPES;
 }
 
-/* Yapay zekânın ürettiği yeni tarifi küresel havuza gönderir (beklemeden). */
+/* Yapay zekânın ürettiği yeni tarifi küresel havuza gönderir (beklemeden).
+   İlk keşfeden bilgisi (takma ad + tarih) de eklenir; havuz ilk yazanı saklar. */
 function pushToPool(key, result) {
 	const poolUrl = activePoolUrl();
 	if (!poolUrl) return;
 	fetch(poolUrl + "/recipe", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ key, result }),
+		body: JSON.stringify({ key, result, by: getNickname(), at: result.at || new Date().toISOString() }),
 	}).catch(() => { /* havuz isteğe bağlı */ });
 }
 
@@ -113,17 +115,20 @@ function validateResult(raw) {
 	if (!name) throw new Error("Model geçerli bir element adı üretemedi.");
 	let emoji = String(raw?.emoji || "").trim();
 	if (!/\p{Extended_Pictographic}/u.test(emoji)) emoji = "✨";
-	const desc = String(raw?.desc || "").trim().slice(0, 160);
+	const desc = String(raw?.desc || "").trim().slice(0, 400);
 	const validCats = CATEGORIES.map((c) => c.id);
 	const rawCat = raw?.category || raw?.cat; // istemci şeması "category", havuz "cat" kullanır
 	const cat = validCats.includes(rawCat) ? rawCat : (CATEGORY_MAP[norm(name)] || "diger");
+	// Havuzdan gelen ilk keşfeden bilgisi (varsa) korunur.
+	const by = raw?.by ? String(raw.by).slice(0, 24) : "";
+	const at = raw?.at ? String(raw.at).slice(0, 30) : "";
 	// Bilinen bir element dönerse kayıtlı ad ve emojiyi kullan (dedup).
 	const existing = getElement(name);
 	if (existing) {
 		name = existing.name;
 		emoji = existing.emoji;
 	}
-	return { name, emoji, isNew: !!raw?.isNew, desc, cat };
+	return { name, emoji, isNew: !!raw?.isNew, desc, cat, by, at };
 }
 
 /* ---------- Oyun belleği ---------- */
@@ -218,12 +223,16 @@ async function combine(nameA, nameB) {
 		if (!result) {
 			// Yalnızca gerçek yapay zekâ çağrıları sıraya alınır.
 			result = validateResult(await enqueueAi(() => aiCombine(a, b)));
+			// Havuz ilk keşfeden bilgisini döndürmediyse (kendi anahtarıyla
+			// üreten oyuncu), iyimser olarak bu oyuncuyu ilk keşfeden say.
+			if (!result.by) { result.by = getNickname(); result.at = new Date().toISOString(); }
 			Store.recipes = { ...Store.recipes, [key]: result };
 			const stats = Store.stats;
 			stats.aiCalls += 1;
 			Store.stats = stats;
-			// Keşfi küresel havuza paylaş (varsa) — diğer oyuncular da öğrenir.
-			pushToPool(key, result);
+			// Keşfi küresel havuza paylaş — yalnızca kendi anahtarıyla üretildiyse;
+			// havuz (ortak yapay zekâ) yolunda sonuç zaten sunucuda saklanmıştır.
+			if (typeof activeKey === "function" && activeKey()) pushToPool(key, result);
 		}
 
 		const stats = Store.stats;
@@ -239,6 +248,9 @@ async function combine(nameA, nameB) {
 				discoveredAt: new Date().toISOString(),
 				firstDiscovery: !!result.isNew,
 				fromPair: [a.name, b.name],
+				// Dünyada ilk keşfeden (havuzdan ya da bu oyuncu) ve tarihi.
+				firstBy: result.by || "",
+				firstAt: result.at || "",
 			};
 			Store.elements = els;
 			stats.discoveries += 1;

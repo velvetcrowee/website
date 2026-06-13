@@ -263,7 +263,7 @@ const COMBINE_SCHEMA = {
 		name: { type: "string", description: "Sonuç elementin Türkçe adı, en fazla 3 kelime, baş harfler büyük" },
 		emoji: { type: "string", description: "Kavramı en iyi anlatan TEK emoji" },
 		isNew: { type: "boolean", description: "Sıra dışı/yaratıcı bir kavramsa true, bilinen temel bir birleşimse false" },
-		desc: { type: "string", description: "Sonucu bir cümleyle anlatan kısa Türkçe açıklama" },
+		desc: { type: "string", description: "Sonucu 2-3 cümleyle anlatan, bilgilendirici ve eğlenceli Türkçe açıklama (en az 2 cümle)" },
 		category: {
 			type: "string",
 			enum: ["doga", "canli", "yiyecek", "insan", "teknoloji", "uzay", "mitoloji", "soyut"],
@@ -307,7 +307,7 @@ function combinePrompt(a, b) {
 		"5. Aynı iki girdi için her zaman aynı tek cevabı verirmiş gibi en olası sonucu seç.",
 		"6. emoji alanına kavramı en iyi anlatan TEK emoji yaz.",
 		"7. isNew: sonuç sıra dışı/şaşırtıcı yeni bir buluşsa true, herkesin bileceği temel bir birleşimse false.",
-		"8. desc alanına sonucu bir cümleyle anlatan kısa, eğlenceli bir Türkçe açıklama yaz.",
+		"8. desc alanına sonucu 2-3 cümleyle anlatan, hem bilgilendirici hem eğlenceli bir Türkçe açıklama yaz (en az 2 cümle).",
 		"9. category alanına sonucun en uygun kategorisini yaz.",
 		"",
 		memoryContext(),
@@ -342,6 +342,8 @@ async function poolCombine(poolUrl, a, b) {
 		body: JSON.stringify({
 			a: { name: a.name, emoji: a.emoji },
 			b: { name: b.name, emoji: b.emoji },
+			finder: getNickname(),
+			finderId: getUserId(),
 		}),
 	});
 	if (!res.ok) {
