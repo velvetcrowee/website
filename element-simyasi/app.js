@@ -691,14 +691,19 @@ async function doAuth(kind) {
 		renderAccount();
 		toast(`👤 Hoş geldin, ${name}!`);
 		// İlerlemeyi buluttan yükle (başka cihazdaki keşifler gelsin), sonra
-		// birleşmiş hâli geri kaydet ve ekranı tazele.
+		// birleşmiş hâli geri kaydet. Sonucu dürüstçe göster.
 		$("#auth-status").textContent = "İlerleme eşitleniyor…";
-		await loadProgress();
-		await saveProgressNow();
-		$("#auth-status").textContent = "";
+		const r = await syncProgress();
 		renderChips();
 		renderQuest();
-		toast("☁️ İlerleme eşitlendi");
+		if (r.ok) {
+			$("#auth-status").textContent = "";
+			toast(`☁️ İlerleme eşitlendi (${Object.keys(Store.elements).length} element)`);
+		} else {
+			const err = (r.load.error || r.save.error || "bilinmeyen hata");
+			$("#auth-status").textContent = "⚠️ Eşitlenemedi: " + err;
+			toast("⚠️ Bulut eşitleme başarısız", "error", 4500);
+		}
 	} catch (err) {
 		$("#auth-status").textContent = err.message;
 	}
@@ -710,6 +715,19 @@ $("#btn-logout").addEventListener("click", () => {
 	logoutAccount();
 	renderAccount();
 	toast("Çıkış yapıldı");
+});
+
+$("#btn-sync").addEventListener("click", async () => {
+	$("#sync-status").textContent = "Eşitleniyor…";
+	const r = await syncProgress();
+	renderChips();
+	renderQuest();
+	if (r.ok) {
+		$("#sync-status").textContent = `✓ Eşitlendi · ${Object.keys(Store.elements).length} element (yükleme: ${r.load.count ?? 0})`;
+		toast("☁️ Eşitlendi");
+	} else {
+		$("#sync-status").textContent = "⚠️ " + (r.load.error || r.save.error || "hata");
+	}
 });
 
 function openSettings(hint = "") {
