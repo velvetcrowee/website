@@ -21,7 +21,24 @@ function toast(text, kind = "", ms = 3000) {
 	el.className = `toast ${kind}`;
 	el.textContent = text;
 	$("#toast-area").appendChild(el);
-	setTimeout(() => el.remove(), ms);
+	// Süre sonunda silinme (fade-out) efektiyle kaybolur.
+	setTimeout(() => {
+		el.classList.add("toast-out");
+		setTimeout(() => el.remove(), 400);
+	}, ms);
+}
+
+/* Yan bildirim: ekranın kenarında belirir, ~2.6 sn sonra silinme efektiyle gider.
+   "X tarafından bulundu" gibi bilgilendirmeler için. */
+function sideNote(text, ms = 2600) {
+	const el = document.createElement("div");
+	el.className = "side-note";
+	el.textContent = text;
+	$("#sidenote-area").appendChild(el);
+	setTimeout(() => {
+		el.classList.add("side-note-out");
+		setTimeout(() => el.remove(), 450);
+	}, ms);
 }
 
 function confetti() {
@@ -70,6 +87,11 @@ function sfx(kind) {
 }
 
 function announceResult(res) {
+	// Bu elementi dünyada daha önce başkası bulduysa, yan tarafta kısa bir
+	// "X tarafından bulundu" bildirimi göster (silinme efektiyle kaybolur).
+	if (res.by && res.by !== getNickname()) {
+		sideNote(`🥇 ${res.emoji} ${res.name} — ${res.by} tarafından bulundu`);
+	}
 	(res.newBadges || []).forEach((b, i) => {
 		setTimeout(() => { toast(`🎖️ Rozet kazandın: ${b.emoji} ${b.name}`, "gold", 4500); sfx("badge"); }, 900 + i * 1200);
 	});
