@@ -690,6 +690,15 @@ async function doAuth(kind) {
 		$("#auth-password").value = "";
 		renderAccount();
 		toast(`👤 Hoş geldin, ${name}!`);
+		// İlerlemeyi buluttan yükle (başka cihazdaki keşifler gelsin), sonra
+		// birleşmiş hâli geri kaydet ve ekranı tazele.
+		$("#auth-status").textContent = "İlerleme eşitleniyor…";
+		await loadProgress();
+		await saveProgressNow();
+		$("#auth-status").textContent = "";
+		renderChips();
+		renderQuest();
+		toast("☁️ İlerleme eşitlendi");
 	} catch (err) {
 		$("#auth-status").textContent = err.message;
 	}
@@ -849,6 +858,15 @@ async function init() {
 	renderWorkspace();
 	renderChips();
 	renderSlots();
+
+	// Giriş yapıldıysa açılışta bulut ilerlemesini çek ve birleştir; sonra
+	// yerel ilerlemeyi de geri kaydet (iki yönlü senkron / ilk yükleme).
+	if (isLoggedIn() && activePoolUrl()) {
+		loadProgress().then((ok) => {
+			if (ok) { renderChips(); renderQuest(); }
+			saveProgressNow();
+		});
+	}
 
 	if ("serviceWorker" in navigator) {
 		navigator.serviceWorker.register("sw.js").catch(() => { /* çevrimdışı desteği isteğe bağlı */ });

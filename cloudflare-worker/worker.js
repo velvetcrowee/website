@@ -103,6 +103,34 @@ function sanitize(key, result) {
 	return out;
 }
 
+/* En fazla `max` anahtar tut (kayıt boyutunu sınırlar). */
+function capObj(obj, max) {
+	const keys = Object.keys(obj || {});
+	if (keys.length <= max) return obj || {};
+	const out = {};
+	for (const k of keys.slice(0, max)) out[k] = obj[k];
+	return out;
+}
+
+/* İki kaydı birleştirir: elementler/tarifler/rozetler birleşim, sayaçlar maks.
+   Çakışmada mevcut (a) korunur — keşif tarihi/ilk-bulan stabil kalsın. */
+function mergeSaves(a, b) {
+	a = a || {}; b = b || {};
+	const elements = capObj({ ...(b.elements || {}), ...(a.elements || {}) }, 8000);
+	const recipes = capObj({ ...(b.recipes || {}), ...(a.recipes || {}) }, 8000);
+	const badges = { ...(b.badges || {}), ...(a.badges || {}) };
+	const sa = a.stats || {}, sb = b.stats || {};
+	return {
+		elements, recipes, badges,
+		stats: {
+			combos: Math.max(sa.combos || 0, sb.combos || 0),
+			aiCalls: Math.max(sa.aiCalls || 0, sb.aiCalls || 0),
+			quests: Math.max(sa.quests || 0, sb.quests || 0),
+			discoveries: Object.keys(elements).length,
+		},
+	};
+}
+
 export default {
 	async fetch(req, env) {
 		if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -149,6 +177,30 @@ export default {
 			if (!validUsername(username)) return json({ available: false, error: "Geçersiz ad" });
 			const existing = await env.RECIPES.get("user:" + norm(username), "json");
 			return json({ available: !existing });
+		}
+
+		/* ---------- Bulut kayıt (hesaba bağlı ilerleme) ---------- */
+
+		if (url.pathname === "/save" && req.method === "POST") {
+			let body;
+			try { body = await req.json(); } catch { return json({ error: "Geçersiz JSON" }, 400); }
+			const user = await resolveUser(env, body?.token);
+			if (!user) return json({ error: "Giriş gerekli." }, 401);
+			const lower = norm(user);
+			const existing = (await env.RECIPES.get("save:" + lower, "json")) || {};
+			// Sunucu tarafı birleştirme: iki cihaz da katkı yapar, biri diğerini ezmez.
+			const merged = mergeSaves(existing, body?.data || {});
+			await env.RECIPES.put("save:" + lower, JSON.stringify(merged));
+			return json({ ok: true, elements: Object.keys(merged.elements).length });
+		}
+
+		if (url.pathname === "/load" && req.method === "POST") {
+			let body;
+			try { body = await req.json(); } catch { return json({ error: "Geçersiz JSON" }, 400); }
+			const user = await resolveUser(env, body?.token);
+			if (!user) return json({ error: "Giriş gerekli." }, 401);
+			const save = (await env.RECIPES.get("save:" + norm(user), "json")) || {};
+			return json(save);
 		}
 
 		if (url.pathname === "/pack" && req.method === "GET") {

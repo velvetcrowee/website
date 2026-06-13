@@ -67,6 +67,69 @@ function pushToPool(key, result) {
 	}).catch(() => { /* havuz isteğe bağlı */ });
 }
 
+/* ---------- Bulut kayıt (hesaba bağlı ilerleme senkronu) ---------- */
+
+let _saveTimer = null;
+
+/* Sunucudaki kaydı yerele birleştirir (birleşim; çakışmada yerel korunur). */
+function mergeSaveIntoLocal(save) {
+	if (!save || typeof save !== "object") return;
+	const els = Store.elements;
+	for (const [k, v] of Object.entries(save.elements || {})) if (!els[k] && v && v.name) els[k] = v;
+	Store.elements = els;
+	const recipes = Store.recipes;
+	for (const [k, v] of Object.entries(save.recipes || {})) if (!recipes[k] && v && v.name) recipes[k] = v;
+	Store.recipes = recipes;
+	const badges = Store.badges;
+	for (const [k, v] of Object.entries(save.badges || {})) if (!badges[k]) badges[k] = v;
+	Store.badges = badges;
+	const s = Store.stats, ss = save.stats || {};
+	s.combos = Math.max(s.combos || 0, ss.combos || 0);
+	s.aiCalls = Math.max(s.aiCalls || 0, ss.aiCalls || 0);
+	s.quests = Math.max(s.quests || 0, ss.quests || 0);
+	s.discoveries = Object.keys(Store.elements).length;
+	Store.stats = s;
+}
+
+/* İlerlemeyi buluta yazar (giriş yapıldıysa). Sunucu mevcut kayıtla birleştirir. */
+async function saveProgressNow() {
+	const poolUrl = activePoolUrl();
+	if (!poolUrl || !isLoggedIn()) return;
+	try {
+		await fetch(poolUrl + "/save", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				token: getToken(),
+				data: { elements: Store.elements, recipes: Store.recipes, stats: Store.stats, badges: Store.badges },
+			}),
+		});
+	} catch { /* çevrimdışı — sonra tekrar denenir */ }
+}
+
+/* Sık değişimlerde ağı yormamak için kaydı geciktir. */
+function scheduleSave() {
+	if (!isLoggedIn() || !activePoolUrl()) return;
+	clearTimeout(_saveTimer);
+	_saveTimer = setTimeout(saveProgressNow, 2500);
+}
+
+/* Buluttan ilerlemeyi yükleyip yerele katar. */
+async function loadProgress() {
+	const poolUrl = activePoolUrl();
+	if (!poolUrl || !isLoggedIn()) return false;
+	try {
+		const res = await fetch(poolUrl + "/load", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ token: getToken() }),
+		});
+		if (!res.ok) return false;
+		mergeSaveIntoLocal(await res.json());
+		return true;
+	} catch { return false; }
+}
+
 /* Elementin kategorisi: kayıtlı alan → bilinen harita → diğer. */
 function elementCategory(e) {
 	if (!e) return "diger";
@@ -255,6 +318,7 @@ async function combine(nameA, nameB) {
 			Store.elements = els;
 			stats.discoveries += 1;
 			discovered = true;
+			scheduleSave(); // yeni keşfi buluta kaydet (giriş yapıldıysa)
 		}
 
 		// Hedef tamamlandı mı?

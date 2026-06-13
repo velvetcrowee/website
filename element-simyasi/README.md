@@ -36,6 +36,10 @@ elementler keşfedersiniz — Karadelik'e, Film'e ve ötesine kadar.
   eder (kimse aynı adı alamaz). Giriş yapıldığında bu ad, ilk keşiflerde
   kimliğiniz olur. Şifreler sunucuda tuzlanmış SHA-256 ile saklanır, düz metin
   tutulmaz. Üye olmadan da misafir olarak oynanabilir.
+- **Bulut kayıt (cihazlar arası senkron):** Giriş yapıldığında keşfettiğiniz
+  elementler, tarifler, istatistikler ve rozetler hesabınıza bağlı olarak
+  buluta kaydedilir (`/save`, `/load`). Telefonda oynayıp PC'de giriş yapınca
+  ilerlemeniz gelir; iki taraf sunucuda birleştirilir, biri diğerini ezmez.
 - **İlk keşfeden:** Bir elementi dünyada ilk keşfeden oyuncunun adı ve tarihi
   havuzda kalıcı kaydedilir; element detayında ve keşif defterinde
   "🥇 İlk bulan: …" olarak görünür. Giriş yapıldıysa kimlik token ile
