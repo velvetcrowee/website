@@ -430,35 +430,36 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 
 /* ---------- Yan bildirim ("X tarafından bulundu") ---------- */
 
+/* Ekranın ortasında belirir (solda değil). */
 #sidenote-area {
 	position: fixed;
-	left: 12px;
-	bottom: 16px;
+	left: 50%;
+	top: 42%;
+	transform: translate(-50%, -50%);
 	z-index: 300;
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	align-items: flex-start;
+	align-items: center;
 	pointer-events: none;
-	max-width: 80vw;
+	max-width: 92vw;
 }
 .side-note {
 	background: linear-gradient(180deg, #2d2410, var(--card-2));
 	border: 1px solid var(--gold);
 	color: var(--gold);
-	border-radius: 12px;
-	padding: 9px 14px;
-	font-size: 0.85rem;
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-	animation: sidein 0.35s ease;
+	border-radius: 14px;
+	padding: 12px 20px;
+	font-size: 1rem;
+	font-weight: 600;
+	text-align: center;
+	box-shadow: 0 6px 22px rgba(0, 0, 0, 0.6);
+	animation: sidein 0.3s ease;
 	max-width: 100%;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
-@keyframes sidein { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; } }
+@keyframes sidein { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: scale(1); } }
 .side-note.side-note-out { animation: sideout 0.45s ease forwards; }
-@keyframes sideout { to { opacity: 0; transform: translateX(-24px); } }
+@keyframes sideout { to { opacity: 0; transform: scale(0.92); } }
 
 /* ---------- Konfeti ---------- */
 

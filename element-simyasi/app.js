@@ -267,6 +267,22 @@ async function mergeItems(idA, idB) {
 	}
 }
 
+/* ---------- Orta tık: tuvaldeki elementi kopyala ---------- */
+
+// Orta tık otomatik kaydırmasını engelle.
+workspaceEl.addEventListener("mousedown", (ev) => {
+	if (ev.button === 1 && ev.target.closest(".ws-item")) ev.preventDefault();
+});
+workspaceEl.addEventListener("auxclick", (ev) => {
+	if (ev.button !== 1) return; // orta tuş
+	const item = ev.target.closest(".ws-item");
+	if (!item) return;
+	ev.preventDefault();
+	const x = parseFloat(item.style.left) + 28;
+	const y = parseFloat(item.style.top) + 24;
+	addWsItem(item.dataset.name, x, y, true);
+});
+
 /* ---------- Sürükle-bırak (Pointer Events) ---------- */
 
 const drag = { active: false };
@@ -275,6 +291,8 @@ document.addEventListener("pointerdown", (ev) => {
 	const chip = ev.target.closest(".chip");
 	const wsItem = ev.target.closest(".ws-item");
 	if (!chip && !wsItem) return;
+	// Yalnızca sol tuş/parmakla sürükle; orta/sağ tuş ayrı ele alınır.
+	if (ev.pointerType === "mouse" && ev.button !== 0) return;
 	ev.preventDefault();
 	drag.active = true;
 	drag.moved = false;
@@ -586,7 +604,7 @@ async function renderLeaderboard() {
 	if (!poolUrl) { box.innerHTML = "<p class='muted'>Liderlik tablosu için havuz gerekli.</p>"; return; }
 	box.innerHTML = "<p class='muted'>Yükleniyor…</p>";
 	try {
-		const res = await fetch(poolUrl + "/leaderboard");
+		const res = await fetch(poolUrl + "/leaderboard?t=" + Date.now(), { cache: "no-store" });
 		const data = await res.json();
 		const me = getNickname();
 		if (!data.top || !data.top.length) {
@@ -906,6 +924,17 @@ async function init() {
 			if (ok) { renderChips(); renderQuest(); }
 			saveProgressNow();
 		});
+	}
+
+	// Havuzu periyodik tazele: ortak emojiler/sayaçlar diğer oyuncularla
+	// yakınsasın (KV birkaç saniye gecikmeli yayıldığı için tam anlık değil).
+	if (activePoolUrl()) {
+		setInterval(() => {
+			loadCommunityRecipes().then(() => {
+				renderChips();
+				if (!$("#modal-book").hidden) renderLeaderboard();
+			});
+		}, 60000);
 	}
 
 	if ("serviceWorker" in navigator) {
