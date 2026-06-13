@@ -21,6 +21,16 @@ elementler keşfedersiniz — Karadelik'e, Film'e ve ötesine kadar.
   prompt'u bu bellekle beslenir: son keşifler ve oyuncunun kendi tarifleri
   bağlama eklenir, keşif sayısı arttıkça yaratıcılık seviyesi yükselir — oyun
   oynandıkça gelişir.
+- **Panelde birleştirme:** Sağ paneldeki birleştirme çubuğu artık masaüstünde
+  de görünür — element chip'ine tıklayınca `[A] + [B] = [?]` çubuğunda birleşir,
+  tuvale getirmeye gerek kalmaz. Ayrıca bir chip'i başka bir chip'in (veya
+  tuvaldeki bir öğenin) üstüne sürükleyerek de doğrudan birleştirebilirsiniz.
+- **🎲 Şanslı birleştirme & 📣 paylaş:** Başlıktaki zar tuşu rastgele iki
+  elementi birleştirir; Keşif Defteri'ndeki paylaş tuşu skorunuzu (Web Share /
+  pano) paylaşır.
+- **🏆 Liderlik tablosu:** Keşif Defteri, havuzdaki "ilk keşfedenleri" sayıp en
+  çok dünya-ilkine sahip oyuncuları sıralar; kendi sıranız vurgulanır. Defterde
+  ayrıca "kaç elementi dünyada ilk siz buldunuz" sayacı gösterilir.
 - **Üyelik (benzersiz kullanıcı adı):** Ayarlar → Profil'den kullanıcı adı +
   şifre ile kayıt olunur; havuz sunucusu adların benzersiz olmasını garanti
   eder (kimse aynı adı alamaz). Giriş yapıldığında bu ad, ilk keşiflerde

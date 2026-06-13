@@ -318,9 +318,23 @@ document.addEventListener("pointerup", (ev) => {
 	if (d.type === "chip") {
 		d.ghost?.remove();
 		if (d.moved) {
-			// Tuvale bırakıldıysa örnek oluştur
+			// Hedefi tespit et (hayalet pointer-events:none olduğu için sayılmaz).
+			const under = document.elementFromPoint(ev.clientX, ev.clientY);
+			const targetChip = under?.closest?.(".chip");
+			const targetWsItem = under?.closest?.(".ws-item");
 			const wr = workspaceEl.getBoundingClientRect();
-			if (ev.clientX >= wr.left && ev.clientX <= wr.right && ev.clientY >= wr.top && ev.clientY <= wr.bottom) {
+			const overWs = ev.clientX >= wr.left && ev.clientX <= wr.right && ev.clientY >= wr.top && ev.clientY <= wr.bottom;
+			if (targetChip && targetChip.dataset.name !== d.name) {
+				// Başka bir element chip'inin üstüne bırakıldı → panelde birleştir.
+				combineByNames(d.name, targetChip.dataset.name);
+			} else if (targetWsItem) {
+				// Tuvaldeki bir öğenin üstüne bırakıldı → onunla birleştir.
+				const wsName = targetWsItem.dataset.name;
+				const mid = { x: parseFloat(targetWsItem.style.left), y: parseFloat(targetWsItem.style.top) };
+				removeWsItem(targetWsItem.dataset.id);
+				combineDroppedOnCanvas(d.name, wsName, mid);
+			} else if (overWs) {
+				// Boş tuvale bırakıldı → örnek oluştur.
 				addWsItem(d.name, ev.clientX - wr.left - 30, ev.clientY - wr.top - 18);
 			}
 		} else {
@@ -376,17 +390,13 @@ function isOverPanel(ev) {
 	return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
 }
 
-/* ---------- Chip dokunuşu: mobilde birleştirme çubuğu, masaüstünde tuvale ekle ---------- */
+/* ---------- Chip dokunuşu: paneldeki birleştirme çubuğunu doldurur ----------
+   Tıklama → sağdaki çubukta birleştir (tuvale getirmeye gerek yok).
+   Sürükleme → tuvale ekle veya başka chip'in üstüne bırakıp birleştir. */
 
 const slots = { a: "", b: "" };
 
 function chipTapped(name) {
-	const combinerVisible = getComputedStyle($("#combiner")).display !== "none";
-	if (!combinerVisible) {
-		const r = workspaceEl.getBoundingClientRect();
-		addWsItem(name, r.width / 2 - 40 + (Math.random() - 0.5) * 120, r.height / 2 - 18 + (Math.random() - 0.5) * 80, true);
-		return;
-	}
 	if ($("#slot-result").dataset.name) clearSlots(); // önceki sonuçtan sonra yeni tur
 	if (!slots.a) slots.a = name;
 	else if (!slots.b) slots.b = name;
@@ -425,6 +435,26 @@ async function combineSlots() {
 		renderChips();
 	} catch (err) {
 		$("#slot-result").textContent = "?";
+		handleCombineError(err);
+	}
+}
+
+/* Bir chip'i başka chip'in üstüne bırakınca doğrudan birleştir (panelde,
+   tuvale getirmeden). Sonuç çubukta da gösterilir. */
+async function combineByNames(nameA, nameB) {
+	slots.a = nameA; slots.b = nameB;
+	renderSlots();
+	await combineSlots();
+}
+
+/* Panelden bir chip'i tuvaldeki öğenin üstüne bırakınca tuvalde birleştir. */
+async function combineDroppedOnCanvas(nameA, nameB, pos) {
+	try {
+		const res = await combine(nameA, nameB);
+		addWsItem(res.name, pos.x, pos.y, true);
+		announceResult(res);
+		renderChips();
+	} catch (err) {
 		handleCombineError(err);
 	}
 }
@@ -468,16 +498,41 @@ $("#btn-clear").addEventListener("click", () => {
 	renderWorkspace();
 });
 
+/* Şanslı birleştirme: keşfedilmiş iki rastgele elementi panelde birleştirir. */
+$("#btn-lucky").addEventListener("click", () => {
+	const names = Object.values(Store.elements).map((e) => e.name);
+	if (names.length < 1) return;
+	const a = names[Math.floor(Math.random() * names.length)];
+	const b = names[Math.floor(Math.random() * names.length)];
+	combineByNames(a, b);
+});
+
+/* Skoru paylaş: Web Share API, yoksa panoya kopyalar. */
+$("#btn-share").addEventListener("click", async () => {
+	const me = getNickname();
+	const firsts = Object.values(Store.elements).filter((e) => e.firstBy && e.firstBy === me).length;
+	const text = `🧪 Element Simyası'nda ${Store.stats.discoveries} element keşfettim`
+		+ (firsts ? `, ${firsts} tanesini dünyada ilk ben buldum! 🥇` : "!")
+		+ "\nSen de oyna: " + location.href;
+	try {
+		if (navigator.share) { await navigator.share({ title: "Element Simyası", text }); }
+		else { await navigator.clipboard.writeText(text); toast("📋 Skor panoya kopyalandı"); }
+	} catch { /* kullanıcı vazgeçti */ }
+});
+
 /* ---------- Keşif Defteri ---------- */
 
 $("#btn-book").addEventListener("click", () => {
 	const stats = Store.stats;
 	const maxDepth = elementList().reduce((m, e) => Math.max(m, elementDepth(e.name)), 0);
+	const me = getNickname();
+	const worldFirsts = Object.values(Store.elements).filter((e) => e.firstBy && e.firstBy === me).length;
 	$("#book-stats").innerHTML = `
 		<div class="stat"><b>${stats.discoveries}</b><span>element</span></div>
+		<div class="stat"><b>${worldFirsts}</b><span>🥇 dünya ilki</span></div>
 		<div class="stat"><b>${stats.combos}</b><span>birleştirme</span></div>
-		<div class="stat"><b>${stats.aiCalls}</b><span>yapay zekâ</span></div>
 		<div class="stat"><b>${maxDepth}</b><span>en derin zincir</span></div>`;
+	renderLeaderboard();
 
 	const earned = Store.badges;
 	$("#badge-grid").innerHTML = BADGES.map((b) => `
@@ -501,6 +556,32 @@ $("#btn-book").addEventListener("click", () => {
 	});
 	$("#modal-book").hidden = false;
 });
+
+/* Liderlik tablosu: havuzdan en çok "dünya ilki" keşfe sahip oyuncular. */
+async function renderLeaderboard() {
+	const box = $("#leaderboard");
+	const poolUrl = activePoolUrl();
+	if (!poolUrl) { box.innerHTML = "<p class='muted'>Liderlik tablosu için havuz gerekli.</p>"; return; }
+	box.innerHTML = "<p class='muted'>Yükleniyor…</p>";
+	try {
+		const res = await fetch(poolUrl + "/leaderboard");
+		const data = await res.json();
+		const me = getNickname();
+		if (!data.top || !data.top.length) {
+			box.innerHTML = "<p class='muted'>Henüz keşif yok — ilk sen ol!</p>";
+		} else {
+			const medals = ["🥇", "🥈", "🥉"];
+			box.innerHTML = `<p class="muted">🌍 Dünyada ${data.totalRecipes} tarif · ${data.totalPlayers} kâşif</p>`
+				+ '<ol class="lb-list">' + data.top.map((u, i) => {
+					const mine = u.name === me ? " lb-me" : "";
+					const rank = medals[i] || `${i + 1}.`;
+					return `<li class="${mine.trim()}"><span class="lb-rank">${rank}</span><span class="lb-name">${escapeHtml(u.name)}</span><span class="lb-count">${u.count} 🥇</span></li>`;
+				}).join("") + "</ol>";
+		}
+	} catch {
+		box.innerHTML = "<p class='muted'>Liderlik tablosu yüklenemedi.</p>";
+	}
+}
 
 /* ---------- Element detayı: hikâye + soy ağacı ---------- */
 
