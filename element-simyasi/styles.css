@@ -15,7 +15,7 @@
 
 [hidden] { display: none !important; }
 
-html, body { height: 100%; }
+html, body { height: 100%; height: 100dvh; }
 
 body {
 	font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -157,6 +157,12 @@ body {
 	height: fit-content;
 }
 .chip:active { cursor: grabbing; }
+.chip > span:last-child {
+	max-width: 130px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .chip.fresh { border-color: var(--accent); box-shadow: 0 0 8px rgba(167, 139, 250, 0.45); animation: pulse 1.2s ease infinite; }
 @keyframes pulse { 50% { box-shadow: 0 0 14px rgba(167, 139, 250, 0.8); } }
 
@@ -415,11 +421,14 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 	to { transform: translateY(105vh) rotate(540deg); opacity: 0.4; }
 }
 
-/* ---------- Mobil ---------- */
+/* ---------- Responsive: yönelime göre düzen ----------
+   Dikey (telefon portre): tuval üstte küçük bir alan, panel altta geniş —
+   mobilde asıl oyun panelde (çubuk + chip'ler) olduğu için panele yer açılır.
+   Yatay (telefon manzara / masaüstü): tuval solda, panel sağda. */
 
-@media (max-width: 720px) {
+@media (orientation: portrait) {
 	#game { flex-direction: column; }
-	#workspace { flex: none; height: 52vh; }
+	#workspace { flex: none; height: 34dvh; min-height: 150px; }
 	#panel {
 		width: 100%;
 		flex: 1;
@@ -427,5 +436,20 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 		border-left: none;
 		border-top: 1px solid #334155;
 	}
+}
+
+/* Dar ekranlarda (telefon) başlık ve boşlukları küçült. */
+@media (max-width: 720px) {
+	.app-header { padding: 8px 12px; gap: 8px; }
 	.app-header h1 { font-size: 1rem; }
+	#element-count { font-size: 0.78rem; }
+	.btn.icon { padding: 7px 9px; }
+	#panel { padding: 8px; gap: 6px; }
+}
+
+/* Kısa yatay ekran (manzara telefon): panel biraz daralsın, her şey sığsın. */
+@media (orientation: landscape) and (max-height: 520px) {
+	#panel { width: 46%; max-width: 340px; }
+	#workspace { height: auto; }
+	.app-header { padding: 6px 12px; }
 }
