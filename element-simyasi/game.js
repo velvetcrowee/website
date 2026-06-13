@@ -63,7 +63,7 @@ function pushToPool(key, result) {
 	fetch(poolUrl + "/recipe", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ key, result, by: getNickname(), at: result.at || new Date().toISOString() }),
+		body: JSON.stringify({ key, result, by: getNickname(), token: getToken(), at: result.at || new Date().toISOString() }),
 	}).catch(() => { /* havuz isteğe bağlı */ });
 }
 

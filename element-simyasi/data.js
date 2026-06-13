@@ -83,11 +83,27 @@ function getUserId() {
 	return id;
 }
 
-/* Oyuncunun herkese görünen takma adı. Boşsa varsayılan üretilir ve saklanır. */
+/* Üyelik: { token, username } — giriş yapıldıysa dolu. */
+function getAccount() {
+	return DB.read("account", null);
+}
+function isLoggedIn() {
+	const a = getAccount();
+	return !!(a && a.token && a.username);
+}
+function getToken() {
+	const a = getAccount();
+	return a && a.token ? a.token : "";
+}
+
+/* Oyuncunun herkese görünen adı: giriş yapıldıysa kullanıcı adı (benzersiz),
+   yoksa "Misafir-XXXX" biçiminde geçici bir ad. */
 function getNickname() {
+	const a = getAccount();
+	if (a && a.username) return a.username;
 	const s = Store.settings;
 	if (s.nickname && s.nickname.trim()) return s.nickname.trim();
-	const def = "Simyacı" + (parseInt(getUserId().slice(-4), 36) % 9000 + 1000);
+	const def = "Misafir-" + (parseInt(getUserId().slice(-4), 36) % 9000 + 1000);
 	Store.settings = { ...s, nickname: def };
 	return def;
 }
