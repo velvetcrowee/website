@@ -230,21 +230,25 @@ async function aiJsonOnce({ prompt, schema, maxTokens }) {
 	}
 }
 
-/* JSON şemalı istek + geçici hatalarda yeniden deneme.
-   Limitte (429/503) beklemek yerine SIRADAKİ Gemini modeline geçilir — her
-   modelin kotası ayrı olduğu için oyun beklemeden devam eder. Diğer geçici
-   hatalarda (kesik/bozuk yanıt) kısa backoff ile aynı model tekrar denenir. */
-async function aiJson(opts) {
+/* Ağ hatası mı (fetch tamamen başarısız — bağlantı/CORS/sunucu erişilemez)? */
+function isNetworkError(err) {
+	return err && (err.name === "TypeError" || /failed to fetch|networkerror|load failed|fetch/i.test(err.message || ""));
+}
+
+/* Geçici hatalarda yeniden deneme sarmalayıcısı. Ağ hataları ve limit/yoğunluk
+   gibi durumlar otomatik tekrar denenir; Gemini limitinde sıradaki modele geçilir.
+   Hem kendi-anahtar (aiJson) hem havuz (poolCombine) yolunda kullanılır. */
+async function withRetry(fn) {
 	const maxAttempts = 5;
 	let lastErr;
 	for (let attempt = 0; attempt < maxAttempts; attempt++) {
 		try {
-			return await aiJsonOnce(opts);
+			return await fn();
 		} catch (err) {
 			lastErr = err;
+			if (isNetworkError(err)) err.retryable = true;
 			if (!err.retryable || attempt === maxAttempts - 1) throw err;
 			if (err.rateLimited && activeProvider() === "gemini") {
-				// Model rotasyonu: kalıcıdır, sonraki istekler de buradan devam eder.
 				geminiModelIdx = (geminiModelIdx + 1) % GEMINI_MODELS.length;
 				await sleep(300);
 			} else {
@@ -253,6 +257,11 @@ async function aiJson(opts) {
 		}
 	}
 	throw lastErr;
+}
+
+/* JSON şemalı istek + geçici hatalarda yeniden deneme. */
+async function aiJson(opts) {
+	return withRetry(() => aiJsonOnce(opts));
 }
 
 /* ---------- Element birleştirme ---------- */
@@ -370,17 +379,25 @@ function logoutAccount() {
 /* Ortak yapay zekâ: oyuncunun kendi anahtarı yoksa istek, havuz sunucusuna
    gider — DeepSeek anahtarı sunucuda gizli tutulur, tarayıcıya asla inmez. */
 async function poolCombine(poolUrl, a, b) {
-	const res = await fetch(poolUrl + "/combine", {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify({
-			a: { name: a.name, emoji: a.emoji },
-			b: { name: b.name, emoji: b.emoji },
-			finder: getNickname(),
-			finderId: getUserId(),
-			token: getToken(),
-		}),
-	});
+	let res;
+	try {
+		res = await fetch(poolUrl + "/combine", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				a: { name: a.name, emoji: a.emoji },
+				b: { name: b.name, emoji: b.emoji },
+				finder: getNickname(),
+				finderId: getUserId(),
+				token: getToken(),
+			}),
+		});
+	} catch {
+		// Ağ/bağlantı hatası → yeniden denenebilir.
+		const e = new Error("Sunucuya ulaşılamadı, tekrar deneniyor…");
+		e.retryable = true;
+		throw e;
+	}
 	if (!res.ok) {
 		let msg = `Ortak yapay zekâ hatası (${res.status})`;
 		try {
@@ -401,7 +418,7 @@ async function aiCombine(a, b) {
 	if (mockEnabled()) return mockCombine(a, b);
 	if (!activeKey()) {
 		const poolUrl = typeof activePoolUrl === "function" ? activePoolUrl() : "";
-		if (poolUrl) return poolCombine(poolUrl, a, b);
+		if (poolUrl) return withRetry(() => poolCombine(poolUrl, a, b));
 	}
 	return aiJson({ prompt: combinePrompt(a, b), schema: COMBINE_SCHEMA, maxTokens: 400 });
 }

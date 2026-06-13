@@ -123,7 +123,11 @@ function handleCombineError(err) {
 		return;
 	}
 	sfx("error");
-	toast(err.message, "error", 4000);
+	let msg = err.message || "Bir hata oluştu";
+	if (/failed to fetch|networkerror|load failed|ulaşılamadı/i.test(msg)) {
+		msg = "Sunucuya ulaşılamadı — internet bağlantını kontrol et, birazdan tekrar dene.";
+	}
+	toast(msg, "error", 4000);
 }
 
 /* ---------- Panel (keşfedilen elementler) ---------- */
