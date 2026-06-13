@@ -75,6 +75,8 @@ body {
 	border-left: 1px solid #334155;
 	padding: 10px;
 	gap: 8px;
+	overflow: hidden;
+	min-height: 0;
 }
 
 #search {
@@ -429,15 +431,16 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 	to { transform: translateY(105vh) rotate(540deg); opacity: 0.4; }
 }
 
-/* ---------- Responsive: yönelime göre düzen ----------
-   Dikey (telefon portre): tuval üstte küçük bir alan, panel altta geniş —
-   mobilde asıl oyun panelde (çubuk + chip'ler) olduğu için panele yer açılır.
-   Yatay (telefon manzara / masaüstü): tuval solda, panel sağda. */
+/* ---------- Responsive ----------
+   Telefonlar (her iki yönde): tek sütun — üstte ince tuval şeridi, altta tam
+   genişlikte kayan panel. Yan-yana bölmek dar/kısa ekranda sıkışıp taşıyordu;
+   tek sütun hem portre hem manzarada tutarlı ve panel listesi rahat kayar.
+   Tabletler/masaüstü (geniş ekran): tuval solda, panel sağda. */
 
-@media (orientation: portrait) {
+@media (max-width: 920px) {
 	#game { flex-direction: column; }
 	/* Yüzde tabanlı bölünme (vh/dvh değil) — sabit yükseklikli gövdede stabil. */
-	#workspace { flex: 0 0 34%; }
+	#workspace { flex: 0 0 32%; }
 	#panel {
 		width: 100%;
 		flex: 1 1 0;
@@ -445,10 +448,6 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 		border-left: none;
 		border-top: 1px solid #334155;
 	}
-}
-
-/* Dar ekranlarda (telefon) başlık ve boşlukları küçült. */
-@media (max-width: 720px) {
 	.app-header { padding: 8px 12px; gap: 8px; }
 	.app-header h1 { font-size: 1rem; }
 	#element-count { font-size: 0.78rem; }
@@ -456,9 +455,11 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 	#panel { padding: 8px; gap: 6px; }
 }
 
-/* Kısa yatay ekran (manzara telefon): panel biraz daralsın, her şey sığsın. */
-@media (orientation: landscape) and (max-height: 520px) {
-	#panel { width: 46%; max-width: 340px; }
-	#workspace { height: auto; }
+/* Manzara telefon (geniş ama kısa): tuval şeridi inceltilip panele yer açılır. */
+@media (max-width: 920px) and (orientation: landscape) {
+	#workspace { flex: 0 0 24%; }
 	.app-header { padding: 6px 12px; }
 }
+
+/* Chip listesinin esnek kapsayıcıda düzgün kayması için. */
+#chip-list { min-height: 0; }
