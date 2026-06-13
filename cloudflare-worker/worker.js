@@ -67,10 +67,16 @@ function sanitize(key, result) {
 	const name = String(result?.name || "").trim().slice(0, 40);
 	if (!name) return null;
 	const emoji = String(result?.emoji || "✨").trim().slice(0, 8);
-	const desc = String(result?.desc || "").trim().slice(0, 160);
+	const desc = String(result?.desc || "").trim().slice(0, 400);
 	const cats = ["doga", "canli", "yiyecek", "insan", "teknoloji", "uzay", "mitoloji", "soyut", "diger"];
 	const cat = cats.includes(result?.cat) ? result.cat : "diger";
-	return { name, emoji, isNew: !!result?.isNew, desc, cat };
+	const out = { name, emoji, isNew: !!result?.isNew, desc, cat };
+	// İlk keşfeden bilgisi (varsa): görünen takma ad + tarih.
+	const by = String(result?.by || "").trim().replace(/[<>]/g, "").slice(0, 24);
+	if (by) out.by = by;
+	const at = String(result?.at || "").trim().slice(0, 30);
+	if (at) out.at = at;
+	return out;
 }
 
 export default {
@@ -86,7 +92,9 @@ export default {
 		if (url.pathname === "/recipe" && req.method === "POST") {
 			let body;
 			try { body = await req.json(); } catch { return json({ error: "Geçersiz JSON" }, 400); }
-			const clean = sanitize(body?.key, body?.result);
+			// İlk keşfeden bilgisini gövdeden tarife taşı (istemci ayrı gönderir).
+			const incoming = { ...(body?.result || {}), by: body?.by ?? body?.result?.by, at: body?.at ?? body?.result?.at };
+			const clean = sanitize(body?.key, incoming);
 			if (!clean) return json({ error: "Geçersiz tarif" }, 400);
 
 			const pack = (await env.RECIPES.get("pack", "json")) || {};
@@ -136,7 +144,7 @@ export default {
 				"5. Aynı iki girdi için her zaman aynı tek cevabı verirmiş gibi en olası sonucu seç.",
 				"6. emoji alanına kavramı en iyi anlatan TEK emoji yaz.",
 				"7. isNew: sonuç sıra dışı/şaşırtıcı yeni bir buluşsa true, herkesin bileceği temel bir birleşimse false.",
-				"8. desc alanına sonucu bir cümleyle anlatan kısa, eğlenceli bir Türkçe açıklama yaz.",
+				"8. desc alanına sonucu 2-3 cümleyle anlatan, hem bilgilendirici hem eğlenceli bir Türkçe açıklama yaz (en az 2 cümle).",
 				"9. category alanına şunlardan birini yaz: doga, canli, yiyecek, insan, teknoloji, uzay, mitoloji, soyut.",
 				"",
 				`Birleştirilecek elementler: "${aEmoji} ${aName}" + "${bEmoji} ${bName}"`,
@@ -155,7 +163,7 @@ export default {
 						{ role: "user", content: prompt },
 					],
 					response_format: { type: "json_object" },
-					max_tokens: 400,
+					max_tokens: 700,
 				}),
 			});
 			if (!res.ok) {
@@ -170,10 +178,15 @@ export default {
 			try { raw = JSON.parse(data.choices?.[0]?.message?.content || ""); }
 			catch { return json({ error: "Yapay zekâ yanıtı çözümlenemedi" }, 502); }
 
-			const clean = sanitize(key, { ...raw, cat: raw.category || raw.cat });
+			// İlk keşfeden: isteği yapan oyuncunun takma adı + şimdiki zaman.
+			const finder = String(body?.finder || "").trim().replace(/[<>]/g, "").slice(0, 24);
+			const clean = sanitize(key, {
+				...raw, cat: raw.category || raw.cat,
+				by: finder, at: new Date().toISOString(),
+			});
 			if (!clean) return json({ error: "Yapay zekâ geçersiz sonuç üretti" }, 502);
 
-			// Havuza yaz: dünyada bir daha sorulmaz.
+			// Havuza yaz: dünyada bir daha sorulmaz; ilk keşfeden kalıcı kaydedilir.
 			const fresh = (await env.RECIPES.get("pack", "json")) || {};
 			if (!fresh[key] && Object.keys(fresh).length < MAX_RECIPES) {
 				fresh[key] = clean;

@@ -19,7 +19,7 @@ const DB = {
 
 const Store = {
 	get settings() {
-		return DB.read("settings", { aiProvider: "gemini", apiKey: "", geminiKey: "", deepseekKey: "", sound: true });
+		return DB.read("settings", { aiProvider: "gemini", apiKey: "", geminiKey: "", deepseekKey: "", sound: true, nickname: "" });
 	},
 	set settings(v) { DB.write("settings", v); },
 
@@ -71,4 +71,23 @@ function norm(s) {
 /* Sıradan bağımsız ikili anahtarı: A+B ve B+A aynı tarife gider. */
 function pairKey(a, b) {
 	return [norm(a), norm(b)].sort((x, y) => x.localeCompare(y, "tr")).join("++");
+}
+
+/* Oyuncunun kalıcı, benzersiz kimliği (bir kez üretilir, cihazda saklanır). */
+function getUserId() {
+	let id = DB.read("uid", null);
+	if (!id) {
+		id = "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+		DB.write("uid", id);
+	}
+	return id;
+}
+
+/* Oyuncunun herkese görünen takma adı. Boşsa varsayılan üretilir ve saklanır. */
+function getNickname() {
+	const s = Store.settings;
+	if (s.nickname && s.nickname.trim()) return s.nickname.trim();
+	const def = "Simyacı" + (parseInt(getUserId().slice(-4), 36) % 9000 + 1000);
+	Store.settings = { ...s, nickname: def };
+	return def;
 }

@@ -21,6 +21,10 @@ elementler keşfedersiniz — Karadelik'e, Film'e ve ötesine kadar.
   prompt'u bu bellekle beslenir: son keşifler ve oyuncunun kendi tarifleri
   bağlama eklenir, keşif sayısı arttıkça yaratıcılık seviyesi yükselir — oyun
   oynandıkça gelişir.
+- **İlk keşfeden:** Bir elementi dünyada ilk keşfeden oyuncunun takma adı ve
+  tarihi havuzda kalıcı kaydedilir; element detayında ve keşif defterinde
+  "🥇 İlk bulan: …" olarak görünür. Takma adınızı Ayarlar → Profil'den
+  belirlersiniz (her oyuncunun ayrıca benzersiz bir kimliği vardır).
 - **Paylaşılan topluluk belleği:** `recipes.json` repoda barınan, tüm
   oyuncuların açılışta indirdiği ortak tarif paketidir (~130 yaygın birleşim).
   Çözümleme sırası: yerleşik → topluluk → oyuncunun önbelleği → yapay zekâ. Yani
