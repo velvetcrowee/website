@@ -69,19 +69,28 @@ Cloudflare'in ücretsiz katmanı bu iş için fazlasıyla yeterlidir
 > ⚠️ API anahtarını **asla oyun koduna/siteye yazmayın** — kod herkese açıktır,
 > anahtar dakikalar içinde çalınır. Anahtarın güvenli yeri burası, sunucudur.
 
-DeepSeek anahtarınızı Worker'a **gizli değişken** olarak eklerseniz, kendi
+Bir yapay zekâ anahtarını Worker'a **gizli değişken** olarak eklerseniz, kendi
 anahtarı olmayan TÜM oyuncular otomatik olarak ortak yapay zekâyı kullanır
-(anahtar tarayıcıya hiç inmez):
+(anahtar tarayıcıya hiç inmez). İki sağlayıcı desteklenir:
+
+- **`GEMINI_KEY`** — Google Gemini (ÜCRETSİZ katman, **önerilen birincil**).
+  Ücretsiz anahtar: https://aistudio.google.com/apikey
+- **`DEEPSEEK_KEY`** — DeepSeek (ücretli, **yedek**).
+
+Worker önce **ücretsiz Gemini'yi** dener; Gemini limitine/​hataya takılırsa
+DeepSeek'e düşer. Böylece ücretli DeepSeek bakiyeniz çok daha uzun dayanır
+(yalnızca Gemini yetmeyince harcanır). En az birini eklemeniz yeterlidir;
+ikisini birden eklemek en sağlamıdır.
 
 ```sh
 cd cloudflare-worker
-wrangler secret put DEEPSEEK_KEY
-# sorulduğunda sk-... anahtarınızı yapıştırın
+wrangler secret put GEMINI_KEY      # önerilen (ücretsiz)
+wrangler secret put DEEPSEEK_KEY    # isteğe bağlı yedek
 wrangler deploy
 ```
 
 Panelden: Worker → **Settings → Variables and Secrets → Add → Secret**,
-isim: `DEEPSEEK_KEY`.
+isim: `GEMINI_KEY` (ve/veya `DEEPSEEK_KEY`).
 
 Korumalar: sonuçlar önce havuzdan döner (tekrar sorular bedava), IP başına
 dakikada 35 yeni istek sınırı vardır ve `deepseek-chat` çok ucuz olduğu için

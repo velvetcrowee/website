@@ -26,6 +26,75 @@ const CORS = {
 const MAX_RECIPES = 50000;
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_MODEL = "deepseek-chat";
+const GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
+
+/* Birleştirme şeması (Gemini responseSchema için). */
+const COMBINE_SCHEMA = {
+	type: "object",
+	properties: {
+		name: { type: "string" },
+		emoji: { type: "string" },
+		isNew: { type: "boolean" },
+		desc: { type: "string" },
+		category: { type: "string", enum: ["doga", "canli", "yiyecek", "insan", "teknoloji", "uzay", "mitoloji", "soyut"] },
+	},
+	required: ["name", "emoji", "isNew", "desc", "category"],
+};
+
+/* Gemini ile birleştir (ücretsiz katman). Model rotasyonu: limitte sıradakine
+   geçer. Başarısızsa null döner ki çağıran DeepSeek'e düşebilsin. */
+async function geminiCombine(env, prompt) {
+	if (!env.GEMINI_KEY) return null;
+	for (const model of GEMINI_MODELS) {
+		let res;
+		try {
+			res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+				method: "POST",
+				headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_KEY },
+				body: JSON.stringify({
+					contents: [{ role: "user", parts: [{ text: prompt }] }],
+					generationConfig: {
+						...(model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+						maxOutputTokens: 700,
+						responseMimeType: "application/json",
+						responseSchema: COMBINE_SCHEMA,
+					},
+				}),
+			});
+		} catch { return null; }
+		if (res.status === 429 || res.status === 503 || res.status === 500) continue; // sıradaki model
+		if (!res.ok) return null;
+		const data = await res.json().catch(() => null);
+		const text = (data?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
+		if (!text) continue;
+		try { return JSON.parse(text); } catch { continue; }
+	}
+	return null;
+}
+
+/* DeepSeek ile birleştir (ücretli yedek). Başarısızsa null. */
+async function deepseekCombine(env, prompt) {
+	if (!env.DEEPSEEK_KEY) return null;
+	let res;
+	try {
+		res = await fetch(DEEPSEEK_API_URL, {
+			method: "POST",
+			headers: { "content-type": "application/json", "authorization": "Bearer " + env.DEEPSEEK_KEY },
+			body: JSON.stringify({
+				model: DEEPSEEK_MODEL,
+				messages: [
+					{ role: "system", content: 'Yalnızca {"name","emoji","isNew","desc","category"} alanlarını içeren geçerli bir JSON nesnesi döndür, başka hiçbir metin yazma.' },
+					{ role: "user", content: prompt },
+				],
+				response_format: { type: "json_object" },
+				max_tokens: 700,
+			}),
+		});
+	} catch { return null; }
+	if (!res.ok) return null;
+	const data = await res.json().catch(() => null);
+	try { return JSON.parse(data?.choices?.[0]?.message?.content || ""); } catch { return null; }
+}
 
 /* IP başına basit hız sınırı (izolat belleğinde, en iyi çaba):
    ortak anahtarın bakiyesini korur. */
@@ -265,7 +334,7 @@ export default {
 			const pack = (await env.RECIPES.get("pack", "json")) || {};
 			if (pack[key]) return json(pack[key]);
 
-			if (!env.DEEPSEEK_KEY) {
+			if (!env.GEMINI_KEY && !env.DEEPSEEK_KEY) {
 				return json({ error: "Ortak yapay zekâ yapılandırılmamış" }, 501);
 			}
 
@@ -290,33 +359,13 @@ export default {
 				`Birleştirilecek elementler: "${aEmoji} ${aName}" + "${bEmoji} ${bName}"`,
 			].join("\n");
 
-			const res = await fetch(DEEPSEEK_API_URL, {
-				method: "POST",
-				headers: {
-					"content-type": "application/json",
-					"authorization": "Bearer " + env.DEEPSEEK_KEY,
-				},
-				body: JSON.stringify({
-					model: DEEPSEEK_MODEL,
-					messages: [
-						{ role: "system", content: 'Yalnızca {"name","emoji","isNew","desc","category"} alanlarını içeren geçerli bir JSON nesnesi döndür, başka hiçbir metin yazma.' },
-						{ role: "user", content: prompt },
-					],
-					response_format: { type: "json_object" },
-					max_tokens: 700,
-				}),
-			});
-			if (!res.ok) {
-				const status = res.status === 429 ? 429 : 502;
-				let msg = `Yapay zekâ hatası (${res.status})`;
-				if (res.status === 402) msg = "Ortak yapay zekâ bakiyesi tükendi — site sahibine haber verin.";
-				if (res.status === 429) msg = "Ortak yapay zekâ yoğun, biraz bekleyip tekrar deneyin.";
-				return json({ error: msg }, status);
+			// Önce ücretsiz Gemini; başarısız/limit ise ücretli DeepSeek'e düş.
+			// Böylece DeepSeek bakiyesi yalnızca Gemini yetmediğinde harcanır.
+			let raw = await geminiCombine(env, prompt);
+			if (!raw) raw = await deepseekCombine(env, prompt);
+			if (!raw) {
+				return json({ error: "Ortak yapay zekâ şu an yanıt veremedi (limit/bakiye). Birazdan tekrar deneyin." }, 502);
 			}
-			const data = await res.json();
-			let raw;
-			try { raw = JSON.parse(data.choices?.[0]?.message?.content || ""); }
-			catch { return json({ error: "Yapay zekâ yanıtı çözümlenemedi" }, 502); }
 
 			// İlk keşfeden: doğrulanmış kullanıcı (token) önceliklidir, yoksa
 			// gönderilen misafir takma adı kullanılır.
@@ -342,7 +391,9 @@ export default {
 			return json({
 				app: "Element Simyası Havuzu",
 				recipes: Object.keys(pack).length,
-				ai: Boolean(env.DEEPSEEK_KEY),
+				ai: Boolean(env.GEMINI_KEY || env.DEEPSEEK_KEY),
+				gemini: Boolean(env.GEMINI_KEY),
+				deepseek: Boolean(env.DEEPSEEK_KEY),
 			});
 		}
 
