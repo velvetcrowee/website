@@ -91,12 +91,13 @@ function mergeSaveIntoLocal(save) {
 	Store.stats = s;
 }
 
-/* İlerlemeyi buluta yazar (giriş yapıldıysa). Sunucu mevcut kayıtla birleştirir. */
+/* İlerlemeyi buluta yazar (giriş yapıldıysa). Sunucu mevcut kayıtla birleştirir.
+   Dönüş: { ok, error, elements } — başarı durumunu çağıran görebilsin. */
 async function saveProgressNow() {
 	const poolUrl = activePoolUrl();
-	if (!poolUrl || !isLoggedIn()) return;
+	if (!poolUrl || !isLoggedIn()) return { ok: false, error: "Giriş yok" };
 	try {
-		await fetch(poolUrl + "/save", {
+		const res = await fetch(poolUrl + "/save", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({
@@ -104,7 +105,17 @@ async function saveProgressNow() {
 				data: { elements: Store.elements, recipes: Store.recipes, stats: Store.stats, badges: Store.badges },
 			}),
 		});
-	} catch { /* çevrimdışı — sonra tekrar denenir */ }
+		if (!res.ok) {
+			let msg = `Sunucu hatası (${res.status})`;
+			if (res.status === 404) msg = "Sunucu güncel değil (bulut kayıt yok). Worker'ı güncelleyin.";
+			if (res.status === 401) msg = "Oturum geçersiz, tekrar giriş yapın.";
+			return { ok: false, error: msg };
+		}
+		const data = await res.json().catch(() => ({}));
+		return { ok: true, elements: data.elements };
+	} catch {
+		return { ok: false, error: "Bağlantı kurulamadı" };
+	}
 }
 
 /* Sık değişimlerde ağı yormamak için kaydı geciktir. */
@@ -114,20 +125,36 @@ function scheduleSave() {
 	_saveTimer = setTimeout(saveProgressNow, 2500);
 }
 
-/* Buluttan ilerlemeyi yükleyip yerele katar. */
+/* Buluttan ilerlemeyi yükleyip yerele katar.
+   Dönüş: { ok, error, count } — kaç element yüklendiği bilgisiyle. */
 async function loadProgress() {
 	const poolUrl = activePoolUrl();
-	if (!poolUrl || !isLoggedIn()) return false;
+	if (!poolUrl || !isLoggedIn()) return { ok: false, error: "Giriş yok" };
 	try {
 		const res = await fetch(poolUrl + "/load", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ token: getToken() }),
 		});
-		if (!res.ok) return false;
-		mergeSaveIntoLocal(await res.json());
-		return true;
-	} catch { return false; }
+		if (!res.ok) {
+			let msg = `Sunucu hatası (${res.status})`;
+			if (res.status === 404) msg = "Sunucu güncel değil (bulut kayıt yok). Worker'ı güncelleyin.";
+			if (res.status === 401) msg = "Oturum geçersiz, tekrar giriş yapın.";
+			return { ok: false, error: msg };
+		}
+		const save = await res.json();
+		mergeSaveIntoLocal(save);
+		return { ok: true, count: Object.keys(save.elements || {}).length };
+	} catch {
+		return { ok: false, error: "Bağlantı kurulamadı" };
+	}
+}
+
+/* Tam senkron: önce yükle-birleştir, sonra birleşmiş hâli geri kaydet. */
+async function syncProgress() {
+	const l = await loadProgress();
+	const s = await saveProgressNow();
+	return { load: l, save: s, ok: l.ok && s.ok };
 }
 
 /* Elementin kategorisi: kayıtlı alan → bilinen harita → diğer. */
