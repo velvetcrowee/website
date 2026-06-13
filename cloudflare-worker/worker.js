@@ -156,6 +156,21 @@ export default {
 			return json(pack);
 		}
 
+		/* Liderlik tablosu: havuzdaki tüm tariflerde "ilk bulan"ları sayar,
+		   en çok ilk keşfe sahip oyuncuları sıralar. */
+		if (url.pathname === "/leaderboard" && req.method === "GET") {
+			const pack = (await env.RECIPES.get("pack", "json")) || {};
+			const counts = {};
+			for (const r of Object.values(pack)) {
+				if (r && r.by) counts[r.by] = (counts[r.by] || 0) + 1;
+			}
+			const top = Object.entries(counts)
+				.map(([name, count]) => ({ name, count }))
+				.sort((a, b) => b.count - a.count)
+				.slice(0, 30);
+			return json({ top, totalRecipes: Object.keys(pack).length, totalPlayers: Object.keys(counts).length });
+		}
+
 		if (url.pathname === "/recipe" && req.method === "POST") {
 			let body;
 			try { body = await req.json(); } catch { return json({ error: "Geçersiz JSON" }, 400); }

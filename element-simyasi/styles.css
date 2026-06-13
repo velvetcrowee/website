@@ -196,9 +196,9 @@ body {
 /* Panel silme vurgusu: tuval öğesi panel üstüne sürüklenince */
 #panel.trash-hint { outline: 2px dashed var(--danger); outline-offset: -4px; }
 
-/* ---------- Birleştirme çubuğu (mobil) ---------- */
+/* ---------- Birleştirme çubuğu (panelde, masaüstü + mobil) ---------- */
 
-#combiner { display: none; align-items: center; gap: 6px; }
+#combiner { display: flex; align-items: center; gap: 6px; }
 #combiner .slot {
 	flex: 1;
 	background: var(--card-2);
@@ -304,6 +304,21 @@ input:focus, select:focus { outline: 2px solid var(--accent-dark); }
 	font-weight: 600;
 	white-space: nowrap;
 }
+
+.lb-list { list-style: none; margin: 0 0 4px; padding: 0; }
+.lb-list li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px 8px;
+	border-radius: 8px;
+	font-size: 0.9rem;
+}
+.lb-list li:nth-child(odd) { background: var(--card-2); }
+.lb-list li.lb-me { outline: 1px solid var(--accent); color: var(--text); }
+.lb-rank { width: 28px; text-align: center; font-weight: 700; }
+.lb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-count { color: var(--gold); font-weight: 600; white-space: nowrap; }
 
 #badge-grid {
 	display: grid;
@@ -412,6 +427,5 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 		border-left: none;
 		border-top: 1px solid #334155;
 	}
-	#combiner { display: flex; }
 	.app-header h1 { font-size: 1rem; }
 }
