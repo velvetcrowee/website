@@ -40,10 +40,13 @@ elementler keşfedersiniz — Karadelik'e, Film'e ve ötesine kadar.
   elementler, tarifler, istatistikler ve rozetler hesabınıza bağlı olarak
   buluta kaydedilir (`/save`, `/load`). Telefonda oynayıp PC'de giriş yapınca
   ilerlemeniz gelir; iki taraf sunucuda birleştirilir, biri diğerini ezmez.
-- **İlk keşfeden:** Bir elementi dünyada ilk keşfeden oyuncunun adı ve tarihi
-  havuzda kalıcı kaydedilir; element detayında ve keşif defterinde
-  "🥇 İlk bulan: …" olarak görünür. Giriş yapıldıysa kimlik token ile
-  sunucuda doğrulanır (sahte ad gönderilemez).
+- **İlk keşfeden:** Bir elementi dünyada ilk keşfeden oyuncunun adı ve
+  **sunucu saatiyle** tarihi (gün + saat) havuzda kalıcı kaydedilir; element
+  detayında ve keşif defterinde "🥇 İlk bulan: …" olarak görünür. Kimlik token
+  ile sunucuda doğrulanır (sahte ad gönderilemez). İstemci saat kaymaları
+  attribution'ı bozmaz; yerel kayıtlar her havuz yüklemesinde havuzun kanonik
+  ilk-bulan bilgisine eşitlenir, "dünya ilki" sayacı liderlikteki kesin değeri
+  gösterir.
 - **Paylaşılan topluluk belleği:** `recipes.json` repoda barınan, tüm
   oyuncuların açılışta indirdiği ortak tarif paketidir (~130 yaygın birleşim).
   Çözümleme sırası: yerleşik → topluluk → oyuncunun önbelleği → yapay zekâ. Yani

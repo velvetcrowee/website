@@ -220,7 +220,10 @@ export default {
 				.map(([name, count]) => ({ name, count }))
 				.sort((a, b) => b.count - a.count)
 				.slice(0, 30);
-			return json({ top, totalRecipes: Object.keys(pack).length, totalPlayers: Object.keys(counts).length });
+			// İstek yapan oyuncunun kesin sayısı (top 30 dışında olsa bile).
+			const me = url.searchParams.get("me");
+			const you = me ? (counts[me] || 0) : undefined;
+			return json({ top, totalRecipes: Object.keys(pack).length, totalPlayers: Object.keys(counts).length, you });
 		}
 
 		if (url.pathname === "/recipe" && req.method === "POST") {
@@ -230,7 +233,7 @@ export default {
 			// yoksa istemcinin gönderdiği takma ad (misafir) kullanılır.
 			const authedUser = await resolveUser(env, body?.token);
 			const credit = authedUser || body?.by || body?.result?.by;
-			const incoming = { ...(body?.result || {}), by: credit, at: body?.at ?? body?.result?.at };
+			const incoming = { ...(body?.result || {}), by: credit, at: new Date().toISOString() };
 			const clean = sanitize(body?.key, incoming);
 			if (!clean) return json({ error: "Geçersiz tarif" }, 400);
 

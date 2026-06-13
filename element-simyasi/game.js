@@ -53,9 +53,10 @@ async function loadCommunityRecipes() {
 			}
 		} catch { /* havuza ulaşılamadı — oyun yereliyle devam eder */ }
 	}
-	reconcileElements();
+	lastPoolChanged = reconcileElements();
 	return COMMUNITY_RECIPES;
 }
+let lastPoolChanged = false;
 
 /* Tutarlılık: keşfedilen elementlerin emoji/kategorisini paylaşılan kanonik
    tarife (seed → recipes.json → havuz) eşitler. Böylece aynı element herkeste
@@ -73,8 +74,16 @@ function reconcileElements() {
 		if (!c) continue;
 		if (c.emoji && els[k].emoji !== c.emoji) { els[k].emoji = c.emoji; changed = true; }
 		if (c.cat && els[k].cat !== c.cat) { els[k].cat = c.cat; changed = true; }
+		// İlk-keşfeden de havuzun kanonik sürümüne eşitlenir: iyimser olarak
+		// kendini ilk sanan oyuncu, havuz başkasını söylüyorsa düzeltilir.
+		if (c.by && (els[k].firstBy !== c.by || els[k].firstAt !== c.at)) {
+			els[k].firstBy = c.by;
+			els[k].firstAt = c.at || els[k].firstAt;
+			changed = true;
+		}
 	}
 	if (changed) Store.elements = els;
+	return changed;
 }
 
 /* Yapay zekânın ürettiği yeni tarifi küresel havuza gönderir (beklemeden).

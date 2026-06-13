@@ -166,7 +166,8 @@ $("#cat-filter").addEventListener("click", (ev) => {
 
 function renderChips() {
 	const q = norm($("#search").value || "");
-	chipListEl.innerHTML = "";
+	// Tek seferde DOM'a ekle (fragment) — çok elementte takılmayı azaltır.
+	const frag = document.createDocumentFragment();
 	elementList()
 		.filter((e) => !q || norm(e.name).includes(q))
 		.filter((e) => !activeCat || elementCategory(e) === activeCat)
@@ -175,8 +176,10 @@ function renderChips() {
 			chip.className = "chip" + (freshNames.has(norm(e.name)) ? " fresh" : "");
 			chip.dataset.name = e.name;
 			chip.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}</span>`;
-			chipListEl.appendChild(chip);
+			frag.appendChild(chip);
 		});
+	chipListEl.innerHTML = "";
+	chipListEl.appendChild(frag);
 	renderCount();
 	renderCatFilter();
 }
@@ -511,7 +514,12 @@ $("#slot-result").addEventListener("click", () => {
 
 /* ---------- Arama ---------- */
 
-$("#search").addEventListener("input", renderChips);
+// Aramayı debounce et: her tuş vuruşunda tüm listeyi yeniden çizme.
+let _searchTimer = null;
+$("#search").addEventListener("input", () => {
+	clearTimeout(_searchTimer);
+	_searchTimer = setTimeout(renderChips, 140);
+});
 
 /* ---------- Hedef göstergesi ---------- */
 
@@ -567,12 +575,12 @@ $("#btn-book").addEventListener("click", () => {
 	const maxDepth = elementList().reduce((m, e) => Math.max(m, elementDepth(e.name)), 0);
 	const me = getNickname();
 	const worldFirsts = Object.values(Store.elements).filter((e) => e.firstBy && e.firstBy === me).length;
+	// "dünya ilki" değeri liderlik tablosu yüklenince kesinleşir (id ile güncellenir).
 	$("#book-stats").innerHTML = `
 		<div class="stat"><b>${stats.discoveries}</b><span>element</span></div>
-		<div class="stat"><b>${worldFirsts}</b><span>🥇 dünya ilki</span></div>
+		<div class="stat"><b id="stat-firsts">${worldFirsts}</b><span>🥇 dünya ilki</span></div>
 		<div class="stat"><b>${stats.combos}</b><span>birleştirme</span></div>
 		<div class="stat"><b>${maxDepth}</b><span>en derin zincir</span></div>`;
-	renderLeaderboard();
 
 	const earned = Store.badges;
 	$("#badge-grid").innerHTML = BADGES.map((b) => `
@@ -582,19 +590,25 @@ $("#btn-book").addEventListener("click", () => {
 			<span class="b-goal">${b.goal}</span>
 		</div>`).join("");
 
-	const list = $("#book-list");
-	list.innerHTML = "";
-	elementList().forEach((e) => {
-		const li = document.createElement("li");
-		li.dataset.name = e.name;
-		const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
-		const from = e.fromPair ? `${e.fromPair[0]} + ${e.fromPair[1]}` : "başlangıç";
-		const first = e.firstBy ? ` <span class="first-tag">🥇 ${escapeHtml(e.firstBy)}</span>` : "";
-		li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}${first}</span>
-			<span class="sub">${escapeHtml(from)} — ${date}</span>`;
-		list.appendChild(li);
-	});
+	// Modal hemen açılsın; ağır liste ve liderlik sonraki kareye ertelenir.
 	$("#modal-book").hidden = false;
+	requestAnimationFrame(() => {
+		const list = $("#book-list");
+		const frag = document.createDocumentFragment();
+		elementList().forEach((e) => {
+			const li = document.createElement("li");
+			li.dataset.name = e.name;
+			const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
+			const from = e.fromPair ? `${e.fromPair[0]} + ${e.fromPair[1]}` : "başlangıç";
+			const first = e.firstBy ? ` <span class="first-tag">🥇 ${escapeHtml(e.firstBy)}</span>` : "";
+			li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}${first}</span>
+				<span class="sub">${escapeHtml(from)} — ${date}</span>`;
+			frag.appendChild(li);
+		});
+		list.innerHTML = "";
+		list.appendChild(frag);
+		renderLeaderboard();
+	});
 });
 
 /* Liderlik tablosu: havuzdan en çok "dünya ilki" keşfe sahip oyuncular. */
@@ -603,10 +617,12 @@ async function renderLeaderboard() {
 	const poolUrl = activePoolUrl();
 	if (!poolUrl) { box.innerHTML = "<p class='muted'>Liderlik tablosu için havuz gerekli.</p>"; return; }
 	box.innerHTML = "<p class='muted'>Yükleniyor…</p>";
+	const me = getNickname();
 	try {
-		const res = await fetch(poolUrl + "/leaderboard?t=" + Date.now(), { cache: "no-store" });
+		const res = await fetch(poolUrl + "/leaderboard?me=" + encodeURIComponent(me) + "&t=" + Date.now(), { cache: "no-store" });
 		const data = await res.json();
-		const me = getNickname();
+		// "dünya ilki" istatistiğini havuzdaki kesin değerle güncelle.
+		if (typeof data.you === "number" && $("#stat-firsts")) $("#stat-firsts").textContent = data.you;
 		if (!data.top || !data.top.length) {
 			box.innerHTML = "<p class='muted'>Henüz keşif yok — ilk sen ol!</p>";
 		} else {
@@ -650,7 +666,7 @@ function openDetail(name) {
 	const firstEl = $("#detail-first");
 	if (e.firstBy) {
 		const fdate = e.firstAt
-			? " · " + new Date(e.firstAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })
+			? " · " + new Date(e.firstAt).toLocaleString("tr-TR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
 			: "";
 		firstEl.textContent = `🥇 İlk bulan: ${e.firstBy}${fdate}`;
 		firstEl.hidden = false;
@@ -931,7 +947,8 @@ async function init() {
 	if (activePoolUrl()) {
 		setInterval(() => {
 			loadCommunityRecipes().then(() => {
-				renderChips();
+				// Yalnızca bir şey değiştiyse yeniden çiz (gereksiz DOM yükü olmasın).
+				if (lastPoolChanged) renderChips();
 				if (!$("#modal-book").hidden) renderLeaderboard();
 			});
 		}, 60000);
