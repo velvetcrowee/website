@@ -131,6 +131,41 @@ async function safePut(env, key, value, options) {
 	}
 }
 
+/* ---------- Toplu havuz yazımı (KV günlük yazma limitini korur) ----------
+   Her yeni tarifte KV'ye yazmak yerine yeni tarifleri bellekte biriktirir ve en
+   sık FLUSH_MIN_MS'de bir, mevcut KV havuzuyla birleştirerek TEK seferde yazarız.
+   Böylece yazma SAYISI çok düşer (limit kolay kolay dolmaz). Bekleyen tarifler
+   aynı isolate içindeki okumalardan da servis edilir; bu yüzden henüz yazılmamış
+   olsa bile aynı ikili için yapay zekâ tekrar çağrılmaz. (En iyi çaba: isolate
+   düşerse yazılmamış birkaç tarif kaybolur, oyun onları sonra yeniden üretir.) */
+let PENDING = {};            // henüz KV'ye yazılmamış yeni tarifler { key: clean }
+let LAST_FLUSH = 0;          // son KV yazma zamanı (ms)
+const FLUSH_MIN_MS = 120000; // en sık 2 dakikada bir KV'ye yaz
+
+/* Bekleyen tarifleri mevcut KV havuzuyla birleştirip yazar (throttle'lı).
+   ctx.waitUntil ile yanıtı bloklamadan çalışır. */
+async function flushPending(env, ctx, force) {
+	if (!Object.keys(PENDING).length) return;
+	const now = Date.now();
+	if (!force && now - LAST_FLUSH < FLUSH_MIN_MS) return; // henüz erken — sonraki istekte yazılır
+	LAST_FLUSH = now;
+	const batch = PENDING;
+	PENDING = {};
+	const work = (async () => {
+		// Diğer isolate'lerin eklediklerini ezmemek için taze KV ile birleştir.
+		const current = (await env.RECIPES.get("pack", "json")) || {};
+		let changed = false;
+		for (const [k, v] of Object.entries(batch)) {
+			if (!current[k] && Object.keys(current).length < MAX_RECIPES) { current[k] = v; changed = true; }
+		}
+		if (changed) {
+			const ok = await safePut(env, "pack", JSON.stringify(current));
+			if (!ok) Object.assign(PENDING, batch); // limit/hata → sonra tekrar denemek üzere geri koy
+		}
+	})();
+	if (ctx && ctx.waitUntil) ctx.waitUntil(work); else await work;
+}
+
 /* Türkçe-güvenli normalizasyon ve sıradan bağımsız ikili anahtarı —
    oyundaki data.js ile birebir aynı olmalıdır. */
 function norm(s) {
@@ -214,7 +249,7 @@ function mergeSaves(a, b) {
 }
 
 export default {
-	async fetch(req, env) {
+	async fetch(req, env, ctx) {
 		if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
 		const url = new URL(req.url);
 
@@ -290,7 +325,8 @@ export default {
 
 		if (url.pathname === "/pack" && req.method === "GET") {
 			const pack = (await env.RECIPES.get("pack", "json")) || {};
-			return json(pack);
+			// Henüz yazılmamış (bekleyen) tarifleri de kat — oyuncular hemen görür.
+			return json(Object.keys(PENDING).length ? { ...pack, ...PENDING } : pack);
 		}
 
 		/* Liderlik tablosu: havuzdaki tüm tariflerde "ilk bulan"ları sayar,
@@ -323,16 +359,17 @@ export default {
 			if (!clean) return json({ error: "Geçersiz tarif" }, 400);
 
 			const pack = (await env.RECIPES.get("pack", "json")) || {};
-			if (pack[body.key]) {
+			if (pack[body.key] || PENDING[body.key]) {
 				// İlk yazan kazanır: havuz deterministik kalır.
 				return json({ ok: true, existing: true, total: Object.keys(pack).length });
 			}
 			if (Object.keys(pack).length >= MAX_RECIPES) {
 				return json({ error: "Havuz dolu" }, 507);
 			}
-			pack[body.key] = clean;
-			const wrote = await safePut(env, "pack", JSON.stringify(pack));
-			return json({ ok: wrote, total: Object.keys(pack).length });
+			// Toplu yazıma al (KV yazma sayısını düşürür); bekleyen okumalardan görünür.
+			PENDING[body.key] = clean;
+			await flushPending(env, ctx);
+			return json({ ok: true, total: Object.keys(pack).length + 1 });
 		}
 
 		if (url.pathname === "/combine" && req.method === "POST") {
@@ -349,6 +386,8 @@ export default {
 			// Önce havuz: dünyada daha önce sorulduysa anında ve bedava döner.
 			const pack = (await env.RECIPES.get("pack", "json")) || {};
 			if (pack[key]) return json(pack[key]);
+			// Henüz yazılmamış ama bu isolate'te biliniyorsa yapay zekâya gitme.
+			if (PENDING[key]) return json(PENDING[key]);
 
 			if (!env.GEMINI_KEY && !env.DEEPSEEK_KEY) {
 				return json({ error: "Ortak yapay zekâ yapılandırılmamış" }, 501);
@@ -393,14 +432,12 @@ export default {
 			});
 			if (!clean) return json({ error: "Yapay zekâ geçersiz sonuç üretti" }, 502);
 
-			// Havuza yaz: dünyada bir daha sorulmaz; ilk keşfeden kalıcı kaydedilir.
-			// Yazma limiti dolsa bile aşağıda sonuç yine döner — oyun kırılmaz.
-			const fresh = (await env.RECIPES.get("pack", "json")) || {};
-			if (!fresh[key] && Object.keys(fresh).length < MAX_RECIPES) {
-				fresh[key] = clean;
-				await safePut(env, "pack", JSON.stringify(fresh));
-			}
-			return json(fresh[key] || clean);
+			// Havuza (toplu) yaz: yazımlar biriktirilip ~2 dakikada bir tek seferde
+			// KV'ye gider — günlük yazma limiti korunur. Limit dolsa bile sonuç yine
+			// döner; oyun kırılmaz.
+			PENDING[key] = clean;
+			await flushPending(env, ctx);
+			return json(clean);
 		}
 
 		if (url.pathname === "/" || url.pathname === "") {
