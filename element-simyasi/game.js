@@ -101,6 +101,12 @@ function pushToPool(key, result) {
 /* ---------- Bulut kayıt (hesaba bağlı ilerleme senkronu) ---------- */
 
 let _saveTimer = null;
+let _lastSaveAt = 0;
+let _savePending = false;
+/* Bulut kaydı KV'ye yazıyor ve KV ücretsiz katmanı günde yalnızca 1000 yazma
+   veriyor. Bu yüzden kaydı kısıtlarız: keşif başına değil, en az 60 sn arayla
+   yaz. Çıkışta (sekme gizlenince) bekleyen kayıt anında gönderilir. */
+const SAVE_MIN_INTERVAL = 60000;
 
 /* Sunucudaki kaydı yerele birleştirir (birleşim; çakışmada yerel korunur). */
 function mergeSaveIntoLocal(save) {
@@ -131,6 +137,8 @@ async function saveProgressNow() {
 		const res = await fetch(poolUrl + "/save", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
+			// keepalive: sekme kapanırken/gizlenirken yapılan çıkış kaydı da tamamlanır.
+			keepalive: true,
 			body: JSON.stringify({
 				token: getToken(),
 				data: { elements: Store.elements, recipes: Store.recipes, stats: Store.stats, badges: Store.badges },
@@ -143,17 +151,36 @@ async function saveProgressNow() {
 			return { ok: false, error: msg };
 		}
 		const data = await res.json().catch(() => ({}));
-		return { ok: true, elements: data.elements };
+		// Sunucu günlük yazma limitinde { ok:false } döndürebilir (200 ile) —
+		// bunu dürüstçe yansıt: ilerleme yerelde, sonra eşitlenecek.
+		return { ok: data.ok !== false, elements: data.elements, error: data.error };
 	} catch {
 		return { ok: false, error: "Bağlantı kurulamadı" };
 	}
 }
 
-/* Sık değişimlerde ağı yormamak için kaydı geciktir. */
+/* Kaydı kısıtlar: en az SAVE_MIN_INTERVAL arayla buluta yazar (KV günlük yazma
+   limitini korumak için keşif başına yazmaz). Araya gelen değişiklikler tek bir
+   sonraki kayıtta toplanır. */
 function scheduleSave() {
 	if (!isLoggedIn() || !activePoolUrl()) return;
+	_savePending = true;
+	const since = Date.now() - _lastSaveAt;
+	if (since >= SAVE_MIN_INTERVAL) {
+		flushSave();
+	} else if (!_saveTimer) {
+		_saveTimer = setTimeout(flushSave, SAVE_MIN_INTERVAL - since);
+	}
+}
+
+/* Bekleyen kaydı hemen gönderir (kısıtlamayı atlar) — çıkışta veya zaman dolunca. */
+function flushSave() {
 	clearTimeout(_saveTimer);
-	_saveTimer = setTimeout(saveProgressNow, 2500);
+	_saveTimer = null;
+	if (!_savePending || !isLoggedIn() || !activePoolUrl()) return;
+	_savePending = false;
+	_lastSaveAt = Date.now();
+	saveProgressNow();
 }
 
 /* Buluttan ilerlemeyi yükleyip yerele katar.
