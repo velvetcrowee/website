@@ -47,6 +47,15 @@ const Store = {
 	get workspace() { return DB.read("workspace", []); },
 	set workspace(v) { DB.write("workspace", v); },
 
+	// Favori (sabitlenen) elementler: norm(ad) dizisi. Panelin üstünde gösterilir.
+	get favorites() { return DB.read("favorites", []); },
+	set favorites(v) { DB.write("favorites", v); },
+
+	// Üretilen element görselleri: { norm(ad): "data:image/...;base64,..." }.
+	// Yapay zekâ ile bir kez üretilip cihazda saklanır (tekrar üretilmez).
+	get images() { return DB.read("images", {}); },
+	set images(v) { DB.write("images", v); },
+
 	resetAll() {
 		Object.keys(localStorage)
 			.filter((k) => k.startsWith("simya."))
@@ -106,4 +115,21 @@ function getNickname() {
 	const def = "Misafir-" + (parseInt(getUserId().slice(-4), 36) % 9000 + 1000);
 	Store.settings = { ...s, nickname: def };
 	return def;
+}
+
+/* ---------- Favoriler ---------- */
+
+function isFavorite(name) {
+	return Store.favorites.includes(norm(name));
+}
+
+/* Favoriyi ekler/çıkarır; yeni durumu (true=favori) döndürür. */
+function toggleFavorite(name) {
+	const key = norm(name);
+	const favs = Store.favorites;
+	const i = favs.indexOf(key);
+	if (i >= 0) { favs.splice(i, 1); Store.favorites = favs; return false; }
+	favs.push(key);
+	Store.favorites = favs;
+	return true;
 }

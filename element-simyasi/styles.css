@@ -184,6 +184,18 @@ body {
 }
 .chip.fresh { border-color: var(--accent); box-shadow: 0 0 8px rgba(167, 139, 250, 0.45); animation: pulse 1.2s ease infinite; }
 @keyframes pulse { 50% { box-shadow: 0 0 14px rgba(167, 139, 250, 0.8); } }
+/* Sabitlenmiş (favori) elementler altın kenarlı görünür ve listede en üstte. */
+.chip.pinned { border-color: var(--gold); }
+.chip-star {
+	font-size: 0.85rem;
+	line-height: 1;
+	margin-left: 2px;
+	cursor: pointer;
+	color: var(--muted);
+	/* Yıldıza tıklama sürüklemeyi başlatmasın diye dokunuş burada yakalanır. */
+	touch-action: none;
+}
+.chip.pinned .chip-star { color: var(--gold); }
 
 /* Tuvaldeki örnekler */
 .ws-item {

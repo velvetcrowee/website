@@ -175,11 +175,15 @@ function renderChips() {
 	elementList()
 		.filter((e) => !q || norm(e.name).includes(q))
 		.filter((e) => !activeCat || elementCategory(e) === activeCat)
+		// Favoriler her zaman en üstte (sabitlenmiş) görünür.
+		.sort((a, b) => (isFavorite(b.name) ? 1 : 0) - (isFavorite(a.name) ? 1 : 0))
 		.forEach((e) => {
+			const fav = isFavorite(e.name);
 			const chip = document.createElement("button");
-			chip.className = "chip" + (freshNames.has(norm(e.name)) ? " fresh" : "");
+			chip.className = "chip" + (freshNames.has(norm(e.name)) ? " fresh" : "") + (fav ? " pinned" : "");
 			chip.dataset.name = e.name;
-			chip.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}</span>`;
+			chip.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}</span>`
+				+ `<span class="chip-star" title="${fav ? t("unpin") : t("pin")}">${fav ? "⭐" : "☆"}</span>`;
 			frag.appendChild(chip);
 		});
 	chipListEl.innerHTML = "";
@@ -187,6 +191,18 @@ function renderChips() {
 	renderCount();
 	renderCatFilter();
 }
+
+/* Yıldıza tıklayınca elementi favorile/çıkar (sürüklemeyi başlatmaz). */
+chipListEl.addEventListener("click", (ev) => {
+	const star = ev.target.closest(".chip-star");
+	if (!star) return;
+	ev.stopPropagation();
+	const chip = star.closest(".chip");
+	if (!chip) return;
+	const nowFav = toggleFavorite(chip.dataset.name);
+	toast(nowFav ? `⭐ ${chip.dataset.name} ${t("pinned")}` : `${chip.dataset.name} ${t("unpinned")}`, "", 1500);
+	renderChips();
+});
 
 function escapeHtml(s) {
 	return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -295,6 +311,8 @@ workspaceEl.addEventListener("auxclick", (ev) => {
 const drag = { active: false };
 
 document.addEventListener("pointerdown", (ev) => {
+	// Favori yıldızı sürüklemeyi başlatmaz (ayrı click ile ele alınır).
+	if (ev.target.closest(".chip-star")) return;
 	const chip = ev.target.closest(".chip");
 	const wsItem = ev.target.closest(".ws-item");
 	if (!chip && !wsItem) return;
