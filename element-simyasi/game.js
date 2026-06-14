@@ -104,9 +104,9 @@ let _saveTimer = null;
 let _lastSaveAt = 0;
 let _savePending = false;
 /* Bulut kaydı KV'ye yazıyor ve KV ücretsiz katmanı günde yalnızca 1000 yazma
-   veriyor. Bu yüzden kaydı kısıtlarız: keşif başına değil, en az 60 sn arayla
+   veriyor. Bu yüzden kaydı kısıtlarız: keşif başına değil, en az 2 dakikada bir
    yaz. Çıkışta (sekme gizlenince) bekleyen kayıt anında gönderilir. */
-const SAVE_MIN_INTERVAL = 60000;
+const SAVE_MIN_INTERVAL = 120000;
 
 /* Sunucudaki kaydı yerele birleştirir (birleşim; çakışmada yerel korunur). */
 function mergeSaveIntoLocal(save) {
