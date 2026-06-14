@@ -118,6 +118,19 @@ function json(data, status = 200) {
 	});
 }
 
+/* KV yazma sarmalayıcısı: günlük yazma limiti (ücretsiz katmanda 1000/gün) ya
+   da geçici bir hata olduğunda isteği 500 ile düşürmek yerine sessizce
+   başarısız sayarız. Böylece limit dolsa bile oyun oynanmaya devam eder —
+   birleştirme sonucu yine döner, yalnızca o an havuza/buluta yazılamaz. */
+async function safePut(env, key, value, options) {
+	try {
+		await env.RECIPES.put(key, value, options);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 /* Türkçe-güvenli normalizasyon ve sıradan bağımsız ikili anahtarı —
    oyundaki data.js ile birebir aynı olmalıdır. */
 function norm(s) {
@@ -220,9 +233,10 @@ export default {
 			const salt = randomToken();
 			const hash = await sha256(salt + password);
 			const acc = { username, salt, hash, userId: String(body?.userId || "").slice(0, 40), createdAt: new Date().toISOString() };
-			await env.RECIPES.put("user:" + lower, JSON.stringify(acc));
+			const stored = await safePut(env, "user:" + lower, JSON.stringify(acc));
+			if (!stored) return json({ error: "Kayıt şu an yapılamıyor (günlük yazma limiti doldu). Biraz sonra tekrar deneyin." }, 503);
 			const token = randomToken();
-			await env.RECIPES.put("tok:" + token, lower, { expirationTtl: 60 * 60 * 24 * 365 });
+			await safePut(env, "tok:" + token, lower, { expirationTtl: 60 * 60 * 24 * 365 });
 			return json({ ok: true, token, username });
 		}
 
@@ -237,7 +251,7 @@ export default {
 			const hash = await sha256(acc.salt + password);
 			if (hash !== acc.hash) return json({ error: "Şifre yanlış." }, 401);
 			const token = randomToken();
-			await env.RECIPES.put("tok:" + token, lower, { expirationTtl: 60 * 60 * 24 * 365 });
+			await safePut(env, "tok:" + token, lower, { expirationTtl: 60 * 60 * 24 * 365 });
 			return json({ ok: true, token, username: acc.username });
 		}
 
@@ -259,7 +273,9 @@ export default {
 			const existing = (await env.RECIPES.get("save:" + lower, "json")) || {};
 			// Sunucu tarafı birleştirme: iki cihaz da katkı yapar, biri diğerini ezmez.
 			const merged = mergeSaves(existing, body?.data || {});
-			await env.RECIPES.put("save:" + lower, JSON.stringify(merged));
+			const saved = await safePut(env, "save:" + lower, JSON.stringify(merged));
+			// Limit dolsa bile 500 atma: ilerleme yerelde duruyor, sonra eşitlenir.
+			if (!saved) return json({ ok: false, error: "Günlük kayıt limiti doldu; ilerlemen cihazda güvende, sonra eşitlenecek." });
 			return json({ ok: true, elements: Object.keys(merged.elements).length });
 		}
 
@@ -315,8 +331,8 @@ export default {
 				return json({ error: "Havuz dolu" }, 507);
 			}
 			pack[body.key] = clean;
-			await env.RECIPES.put("pack", JSON.stringify(pack));
-			return json({ ok: true, total: Object.keys(pack).length });
+			const wrote = await safePut(env, "pack", JSON.stringify(pack));
+			return json({ ok: wrote, total: Object.keys(pack).length });
 		}
 
 		if (url.pathname === "/combine" && req.method === "POST") {
@@ -378,10 +394,11 @@ export default {
 			if (!clean) return json({ error: "Yapay zekâ geçersiz sonuç üretti" }, 502);
 
 			// Havuza yaz: dünyada bir daha sorulmaz; ilk keşfeden kalıcı kaydedilir.
+			// Yazma limiti dolsa bile aşağıda sonuç yine döner — oyun kırılmaz.
 			const fresh = (await env.RECIPES.get("pack", "json")) || {};
 			if (!fresh[key] && Object.keys(fresh).length < MAX_RECIPES) {
 				fresh[key] = clean;
-				await env.RECIPES.put("pack", JSON.stringify(fresh));
+				await safePut(env, "pack", JSON.stringify(fresh));
 			}
 			return json(fresh[key] || clean);
 		}

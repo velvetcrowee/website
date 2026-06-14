@@ -1281,6 +1281,14 @@ function endSplitDrag(ev) {
 vsplitEl.addEventListener("pointerup", endSplitDrag);
 vsplitEl.addEventListener("pointercancel", endSplitDrag);
 
+/* Sekme gizlenince / kapanırken bekleyen bulut kaydını hemen gönder (keepalive
+   ile tamamlanır). Böylece çıkışta ilerleme kaybolmaz ama normal oyunda yazma
+   sayısı düşük kalır (KV günlük limitini korur). */
+document.addEventListener("visibilitychange", () => {
+	if (document.visibilityState === "hidden") flushSave();
+});
+window.addEventListener("pagehide", flushSave);
+
 /* ---------- Başlangıç ---------- */
 
 async function init() {
