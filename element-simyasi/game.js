@@ -203,9 +203,31 @@ function getElement(name) {
 	return Store.elements[norm(name)] || null;
 }
 
+/* Keşif sırasına göre (yeni→eski) sıralı element listesi. Sonuç, elementler
+   değişene dek (elementsVersion) önbelleğe alınır — her render'da yeniden
+   sıralamayı önler. Çağıranlar diziyi yerinde değiştirmez (filter/sort kopya
+   üretir), bu yüzden önbellek referansı paylaşmak güvenlidir. */
+let _elListCache = null, _elListVer = -1;
 function elementList() {
-	return Object.values(Store.elements)
+	if (_elListVer === elementsVersion && _elListCache) return _elListCache;
+	_elListCache = Object.values(Store.elements)
 		.sort((a, b) => new Date(b.discoveredAt) - new Date(a.discoveredAt));
+	_elListVer = elementsVersion;
+	return _elListCache;
+}
+
+/* Kategori → element sayısı; elementler değişene dek önbelleğe alınır. */
+let _catCountCache = null, _catCountVer = -1;
+function categoryCounts() {
+	if (_catCountVer === elementsVersion && _catCountCache) return _catCountCache;
+	const counts = {};
+	for (const e of Object.values(Store.elements)) {
+		const c = elementCategory(e);
+		counts[c] = (counts[c] || 0) + 1;
+	}
+	_catCountCache = counts;
+	_catCountVer = elementsVersion;
+	return counts;
 }
 
 /* İlk açılışta 4 temel elementi ekler. */

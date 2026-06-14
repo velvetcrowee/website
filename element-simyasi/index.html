@@ -12,13 +12,13 @@
 </head>
 <body>
 	<header class="app-header">
-		<h1>🧪 Element Simyası</h1>
+		<h1 data-i18n="title">🧪 Element Simyası</h1>
 		<span id="element-count"></span>
 		<div class="header-btns">
-			<button id="btn-lucky" class="btn icon" title="Şanslı birleştirme">🎲</button>
-			<button id="btn-book" class="btn icon" title="Keşif Defteri">📖</button>
-			<button id="btn-clear" class="btn icon" title="Tuvali temizle">🗑️</button>
-			<button id="btn-settings" class="btn icon" title="Ayarlar">⚙️</button>
+			<button id="btn-lucky" class="btn icon" data-i18n-title="lucky" title="Şanslı birleştirme">🎲</button>
+			<button id="btn-book" class="btn icon" data-i18n-title="book" title="Keşif Defteri">📖</button>
+			<button id="btn-clear" class="btn icon" data-i18n-title="clear" title="Tuvali temizle">🗑️</button>
+			<button id="btn-settings" class="btn icon" data-i18n-title="settings" title="Ayarlar">⚙️</button>
 		</div>
 	</header>
 
@@ -26,7 +26,8 @@
 		<div id="workspace">
 			<div id="quest-bar" hidden>
 				<span id="quest-text"></span>
-				<button id="quest-skip" class="del" title="Yeni hedef">↻</button>
+				<button id="quest-hint" class="del" data-i18n-title="questHint" title="İpucu">💡</button>
+				<button id="quest-skip" class="del" data-i18n-title="newRound" title="Yeni hedef">↻</button>
 			</div>
 		</div>
 		<aside id="panel">
@@ -38,7 +39,7 @@
 				<span class="op">=</span>
 				<button id="slot-result" class="slot result" data-name="">?</button>
 			</div>
-			<input type="search" id="search" placeholder="🔍 Ara…" autocomplete="off">
+			<input type="search" id="search" data-i18n-ph="search" placeholder="🔍 Ara…" autocomplete="off">
 			<div id="cat-filter"></div>
 			<div id="chip-list"></div>
 		</aside>
@@ -48,18 +49,25 @@
 	<div id="modal-book" class="modal" hidden>
 		<div class="modal-card">
 			<div class="row-between">
-				<h2>📖 Keşif Defteri</h2>
+				<h2 data-i18n="bookTitle">📖 Keşif Defteri</h2>
 				<button class="del modal-close">✕</button>
 			</div>
 			<div id="book-stats" class="stats-row"></div>
-			<h3>🏆 Liderlik Tablosu</h3>
+			<h3 data-i18n="leaderboard">🏆 Liderlik Tablosu</h3>
 			<div id="leaderboard"></div>
-			<h3>🎖️ Rozetler</h3>
+			<h3 data-i18n="catLeaderboard">🏷️ Kategori Şampiyonları</h3>
+			<div id="cat-leaderboard"></div>
+			<h3 data-i18n="activity">📣 Son Keşifler</h3>
+			<div id="activity-feed"></div>
+			<h3 data-i18n="collections">🧩 Koleksiyonlar</h3>
+			<div id="collection-grid"></div>
+			<h3 data-i18n="badges">🎖️ Rozetler</h3>
 			<div id="badge-grid"></div>
-			<button id="btn-share" class="btn full">📣 Skorumu paylaş</button>
-			<h3>🧭 Keşifler</h3>
-			<p class="muted">Bir elemente dokunarak hikâyesini ve soy ağacını görebilirsiniz.</p>
+			<button id="btn-share" class="btn full" data-i18n="shareScore">📣 Skorumu paylaş</button>
+			<h3 data-i18n="discoveries">🧭 Keşifler</h3>
+			<p class="muted" data-i18n="bookHint">Bir elemente dokunarak hikâyesini ve soy ağacını görebilirsiniz.</p>
 			<ul id="book-list" class="item-list"></ul>
+			<button id="btn-book-more" class="btn full" data-i18n="showMore" hidden>Daha fazla göster</button>
 		</div>
 	</div>
 
@@ -73,8 +81,21 @@
 			<p id="detail-desc" class="muted"></p>
 			<p id="detail-first" class="detail-first" hidden></p>
 			<p id="detail-meta" class="muted"></p>
-			<h3>🌳 Soy Ağacı</h3>
+			<div id="detail-image-box"></div>
+			<button id="btn-gen-image" class="btn full" data-i18n="genImage">🎨 Görsel üret</button>
+			<h3 data-i18n="lineage">🌳 Soy Ağacı</h3>
 			<ul id="detail-lineage" class="item-list"></ul>
+		</div>
+	</div>
+
+	<!-- Oyuncu profili (herkese açık: dünya ilkleri, kategoriler) -->
+	<div id="modal-profile" class="modal" hidden>
+		<div class="modal-card">
+			<div class="row-between">
+				<h2 id="profile-title"></h2>
+				<button class="del modal-close">✕</button>
+			</div>
+			<div id="profile-body"></div>
 		</div>
 	</div>
 
@@ -82,29 +103,29 @@
 	<div id="modal-settings" class="modal" hidden>
 		<div class="modal-card">
 			<div class="row-between">
-				<h2>⚙️ Ayarlar</h2>
+				<h2 data-i18n="settingsTitle">⚙️ Ayarlar</h2>
 				<button class="del modal-close">✕</button>
 			</div>
 			<p id="settings-hint" class="muted accent-text" hidden></p>
-			<h3>Profil & Üyelik</h3>
+			<h3 data-i18n="profileMembership">Profil & Üyelik</h3>
 			<div id="account-loggedout">
 				<p class="muted">Benzersiz bir kullanıcı adı alın — bir elementi dünyada ilk keşfettiğinizde adınız herkese görünür. Kimse aynı adı alamaz.</p>
-				<input type="text" id="auth-username" maxlength="20" placeholder="Kullanıcı adı (3-20 karakter)" autocomplete="username">
-				<input type="password" id="auth-password" placeholder="Şifre (en az 4 karakter)" autocomplete="current-password">
+				<input type="text" id="auth-username" maxlength="20" data-i18n-ph="usernamePh" placeholder="Kullanıcı adı (3-20 karakter)" autocomplete="username">
+				<input type="password" id="auth-password" data-i18n-ph="passwordPh" placeholder="Şifre (en az 4 karakter)" autocomplete="current-password">
 				<div class="row">
-					<button id="btn-register" class="btn primary grow">Kayıt ol</button>
-					<button id="btn-login" class="btn grow">Giriş yap</button>
+					<button id="btn-register" class="btn primary grow" data-i18n="register">Kayıt ol</button>
+					<button id="btn-login" class="btn grow" data-i18n="login">Giriş yap</button>
 				</div>
 				<p id="auth-status" class="muted"></p>
 			</div>
 			<div id="account-loggedin" hidden>
 				<p id="account-line" class="accent-text"></p>
-				<button id="btn-sync" class="btn primary full">☁️ Şimdi eşitle</button>
+				<button id="btn-sync" class="btn primary full" data-i18n="syncNow">☁️ Şimdi eşitle</button>
 				<p id="sync-status" class="muted"></p>
-				<button id="btn-logout" class="btn full">Çıkış yap</button>
+				<button id="btn-logout" class="btn full" data-i18n="logout">Çıkış yap</button>
 			</div>
 			<p id="uid-line" class="muted"></p>
-			<h3>Yapay Zekâ</h3>
+			<h3 data-i18n="aiHeading">Yapay Zekâ</h3>
 			<p class="muted">Bilinmeyen birleşimleri yapay zekâ üretir — olasılıklar sınırsızdır. Anahtarlar yalnızca bu cihazda saklanır.</p>
 			<select id="ai-provider">
 				<option value="gemini">Gemini (Google) — ücretsiz anahtar</option>
@@ -123,26 +144,31 @@
 				<input type="password" id="api-key-input" placeholder="Claude anahtarı (sk-ant-...)">
 				<p class="muted">Anahtar: <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a></p>
 			</div>
-			<h3>Küresel Havuz</h3>
+			<h3 data-i18n="poolHeading">Küresel Havuz</h3>
 			<p id="pool-status" class="muted"></p>
 			<details class="manual-entry">
 				<summary class="muted">Gelişmiş: farklı havuz adresi kullan</summary>
 				<p class="muted">Normalde bu alanla uğraşmanıza gerek yok — sitenin havuzu varsa otomatik bağlanırsınız. Yalnızca kendi Worker'ınızı kullanmak isterseniz adresini girin.</p>
 				<input type="url" id="pool-url-input" placeholder="https://simya-havuz.kullanici.workers.dev">
 			</details>
-			<button id="btn-save-key" class="btn primary full">Kaydet</button>
+			<button id="btn-save-key" class="btn primary full" data-i18n="save">Kaydet</button>
 			<p id="key-status" class="muted"></p>
-			<h3>Oyun</h3>
-			<label class="check-row"><input type="checkbox" id="sound-toggle" checked> Ses efektleri</label>
-			<h3>Veriler & Oyun Belleği</h3>
+			<h3 data-i18n="gameHeading">Oyun</h3>
+			<label class="check-row" data-i18n="language">Dil / Language</label>
+			<select id="lang-select">
+				<option value="tr">Türkçe</option>
+				<option value="en">English</option>
+			</select>
+			<label class="check-row"><input type="checkbox" id="sound-toggle" checked> <span data-i18n="soundFx">Ses efektleri</span></label>
+			<h3 data-i18n="dataHeading">Veriler & Oyun Belleği</h3>
 			<p id="memory-info" class="muted"></p>
-			<button id="btn-export" class="btn full">📤 Verileri dışa aktar (JSON)</button>
-			<button id="btn-import" class="btn full">📥 Başka oyuncudan tarif aktar (JSON)</button>
+			<button id="btn-export" class="btn full" data-i18n="exportData">📤 Verileri dışa aktar (JSON)</button>
+			<button id="btn-import" class="btn full" data-i18n="importData">📥 Başka oyuncudan tarif aktar (JSON)</button>
 			<input type="file" id="import-file" accept="application/json,.json" hidden>
 			<p class="muted">İçe aktarma, başka bir oyuncunun keşfettiği tarifleri sizin oyununuza katar — o ikililer için yapay zekâya gerek kalmaz.</p>
-			<button id="btn-export-train" class="btn full">🧠 Eğitim verisini dışa aktar (JSONL)</button>
+			<button id="btn-export-train" class="btn full" data-i18n="exportTrain">🧠 Eğitim verisini dışa aktar (JSONL)</button>
 			<p class="muted">Eğitim verisi, oyunun öğrendiği tüm tarifleri yapay zekâ ince ayarına (fine-tuning) hazır sohbet biçiminde dışa aktarır.</p>
-			<button id="btn-reset" class="btn danger full">Tüm verileri sıfırla</button>
+			<button id="btn-reset" class="btn danger full" data-i18n="resetAll">Tüm verileri sıfırla</button>
 		</div>
 	</div>
 
@@ -151,7 +177,9 @@
 	<div id="confetti-area"></div>
 
 	<script src="data.js"></script>
+	<script src="i18n.js"></script>
 	<script src="categories.js"></script>
+	<script src="collections.js"></script>
 	<script src="seed.js"></script>
 	<script src="ai.js"></script>
 	<script src="game.js"></script>

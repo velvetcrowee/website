@@ -104,6 +104,7 @@ function announceResult(res) {
 		}, 600);
 	}
 	if (!res.discovered) { sfx("merge"); return; }
+	checkCollections();
 	if (res.isNew) {
 		toast(`🏆 İlk Keşif: ${res.emoji} ${res.name}`, "gold", 4500);
 		confetti();
@@ -141,11 +142,8 @@ function renderCount() {
 let activeCat = "";
 
 function renderCatFilter() {
-	const counts = {};
-	elementList().forEach((e) => {
-		const c = elementCategory(e);
-		counts[c] = (counts[c] || 0) + 1;
-	});
+	const counts = categoryCounts();
+	const total = Object.keys(Store.elements).length;
 	const bar = $("#cat-filter");
 	bar.innerHTML = "";
 	const mk = (id, label) => {
@@ -155,7 +153,7 @@ function renderCatFilter() {
 		b.textContent = label;
 		bar.appendChild(b);
 	};
-	mk("", `Tümü ${Object.keys(Store.elements).length}`);
+	mk("", `${t("all")} ${total}`);
 	CATEGORIES.forEach((c) => {
 		if (counts[c.id]) mk(c.id, `${c.emoji} ${c.name} ${counts[c.id]}`);
 	});
@@ -168,25 +166,79 @@ $("#cat-filter").addEventListener("click", (ev) => {
 	renderChips();
 });
 
+/* Anahtarlı (keyed) artımlı render: tüm listeyi sıfırdan kurmak yerine var olan
+   chip düğümlerini yeniden kullanır, yalnızca değişenleri günceller ve sırayı
+   yerinde düzeltir. Favori sabitleme, birleştirme ve havuz tazelemesi gibi sık
+   olaylarda 300+ düğümü her seferinde söküp yeniden kurmayı önler. */
+const chipNodes = new Map(); // norm(ad) → buton düğümü
+
+function createChip(e) {
+	const chip = document.createElement("button");
+	chip.className = "chip";
+	const emo = document.createElement("span");
+	const nm = document.createElement("span");
+	const star = document.createElement("span");
+	star.className = "chip-star";
+	chip.append(emo, nm, star);
+	updateChip(chip, e);
+	return chip;
+}
+
+function updateChip(chip, e) {
+	const fav = isFavorite(e.name);
+	const cls = "chip" + (freshNames.has(norm(e.name)) ? " fresh" : "") + (fav ? " pinned" : "");
+	if (chip.className !== cls) chip.className = cls;
+	if (chip.dataset.name !== e.name) chip.dataset.name = e.name;
+	// textContent kullanılır: ayrıca kaçış (escape) gerekmez, parse maliyeti yok.
+	if (chip.children[0].textContent !== e.emoji) chip.children[0].textContent = e.emoji;
+	if (chip.children[1].textContent !== e.name) chip.children[1].textContent = e.name;
+	const star = chip.children[2];
+	const starCh = fav ? "⭐" : "☆";
+	if (star.textContent !== starCh) star.textContent = starCh;
+	star.title = fav ? t("unpin") : t("pin");
+}
+
 function renderChips() {
 	const q = norm($("#search").value || "");
-	// Tek seferde DOM'a ekle (fragment) — çok elementte takılmayı azaltır.
-	const frag = document.createDocumentFragment();
-	elementList()
+	const list = elementList()
 		.filter((e) => !q || norm(e.name).includes(q))
 		.filter((e) => !activeCat || elementCategory(e) === activeCat)
-		.forEach((e) => {
-			const chip = document.createElement("button");
-			chip.className = "chip" + (freshNames.has(norm(e.name)) ? " fresh" : "");
-			chip.dataset.name = e.name;
-			chip.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}</span>`;
-			frag.appendChild(chip);
-		});
-	chipListEl.innerHTML = "";
-	chipListEl.appendChild(frag);
+		// Favoriler her zaman en üstte (sabitlenmiş) görünür. sort kararlıdır:
+		// grup içinde keşif sırası (yenilik) korunur.
+		.sort((a, b) => (isFavorite(b.name) ? 1 : 0) - (isFavorite(a.name) ? 1 : 0));
+
+	const seen = new Set();
+	let prev = null;
+	for (const e of list) {
+		const key = norm(e.name);
+		seen.add(key);
+		let node = chipNodes.get(key);
+		if (!node) { node = createChip(e); chipNodes.set(key, node); }
+		else updateChip(node, e);
+		// Düğümü prev'den hemen sonraya getir (zaten oradaysa dokunma).
+		const ref = prev ? prev.nextSibling : chipListEl.firstChild;
+		if (ref !== node) chipListEl.insertBefore(node, ref);
+		prev = node;
+	}
+	// Artık listede olmayan (arama/filtre dışı kalan) düğümleri kaldır.
+	for (const [key, node] of chipNodes) {
+		if (!seen.has(key)) { node.remove(); chipNodes.delete(key); }
+	}
 	renderCount();
 	renderCatFilter();
 }
+
+/* Yıldıza tıklayınca elementi favorile/çıkar (sürüklemeyi başlatmaz). */
+chipListEl.addEventListener("click", (ev) => {
+	const star = ev.target.closest(".chip-star");
+	if (!star) return;
+	ev.stopPropagation();
+	const chip = star.closest(".chip");
+	if (!chip) return;
+	const nowFav = toggleFavorite(chip.dataset.name);
+	toast(nowFav ? `⭐ ${chip.dataset.name} ${t("pinned")}` : `${chip.dataset.name} ${t("unpinned")}`, "", 1500);
+	renderChips();
+});
 
 function escapeHtml(s) {
 	return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -295,6 +347,8 @@ workspaceEl.addEventListener("auxclick", (ev) => {
 const drag = { active: false };
 
 document.addEventListener("pointerdown", (ev) => {
+	// Favori yıldızı sürüklemeyi başlatmaz (ayrı click ile ele alınır).
+	if (ev.target.closest(".chip-star")) return;
 	const chip = ev.target.closest(".chip");
 	const wsItem = ev.target.closest(".ws-item");
 	if (!chip && !wsItem) return;
@@ -328,10 +382,24 @@ document.addEventListener("pointerdown", (ev) => {
 	}
 });
 
+/* pointermove saniyede onlarca kez tetiklenir; konum güncellemesini
+   requestAnimationFrame ile kareye bir kez sıkıştırırız (layout thrash azalır,
+   sürükleme akıcılaşır). Son olay saklanır, kare geldiğinde işlenir. */
+let _moveEv = null, _moveRaf = 0;
+
 document.addEventListener("pointermove", (ev) => {
 	if (!drag.active) return;
 	if (Math.abs(ev.clientX - drag.startX) + Math.abs(ev.clientY - drag.startY) > 6) drag.moved = true;
 	if (!drag.moved) return;
+	// PointerEvent'ten yalnızca konumu sakla (olay nesnesi sonra geçersiz olabilir).
+	_moveEv = { clientX: ev.clientX, clientY: ev.clientY };
+	if (!_moveRaf) _moveRaf = requestAnimationFrame(processMove);
+}, { passive: true });
+
+function processMove() {
+	_moveRaf = 0;
+	const ev = _moveEv;
+	if (!ev || !drag.active || !drag.moved) return;
 
 	if (drag.type === "chip") {
 		if (!drag.ghost) {
@@ -339,8 +407,8 @@ document.addEventListener("pointermove", (ev) => {
 			drag.ghost.classList.add("drag-ghost");
 			document.body.appendChild(drag.ghost);
 		}
-		drag.ghost.style.left = ev.clientX - 30 + "px";
-		drag.ghost.style.top = ev.clientY - 18 + "px";
+		// transform: GPU katmanı, left/top'tan daha akıcı.
+		drag.ghost.style.transform = `translate3d(${ev.clientX - 30}px, ${ev.clientY - 18}px, 0)`;
 	} else {
 		const node = wsItemEl(drag.id);
 		if (!node) return;
@@ -354,12 +422,26 @@ document.addEventListener("pointermove", (ev) => {
 		if (target?.classList.contains("ws-item")) target.classList.add("merge-target");
 		panelEl.classList.toggle("trash-hint", !!target?.closest?.("#panel") || isOverPanel(ev));
 	}
-});
+}
+
+function cancelPendingMove() {
+	if (_moveRaf) { cancelAnimationFrame(_moveRaf); _moveRaf = 0; }
+	_moveEv = null;
+}
+
+/* Bırakmadan (pointerup) hemen önce bekleyen son kareyi uygula: aksi halde
+   rAF iptal edilince öğe son hareketin bir kare gerisinde kalır ve o eski konum
+   kaydedilirdi. drag.active hâlâ true iken çağrılmalı. */
+function flushPendingMove() {
+	if (_moveRaf) { cancelAnimationFrame(_moveRaf); _moveRaf = 0; processMove(); }
+}
 
 document.addEventListener("pointerup", (ev) => {
 	if (!drag.active) return;
+	flushPendingMove();
 	const d = { ...drag };
 	drag.active = false;
+	cancelPendingMove();
 	panelEl.classList.remove("trash-hint");
 
 	if (d.type === "chip") {
@@ -419,6 +501,7 @@ document.addEventListener("pointerup", (ev) => {
 document.addEventListener("pointercancel", () => {
 	if (!drag.active) return;
 	drag.active = false;
+	cancelPendingMove();
 	drag.ghost?.remove();
 	if (drag.type === "ws") wsItemEl(drag.id)?.classList.remove("dragging");
 	$$(".ws-item.merge-target").forEach((n) => n.classList.remove("merge-target"));
@@ -460,7 +543,7 @@ function clearSlots() {
 
 function slotLabel(name) {
 	const e = name && getElement(name);
-	return e ? `${e.emoji} ${e.name}` : "＋ Seç";
+	return e ? `${e.emoji} ${e.name}` : t("slotPick");
 }
 
 function renderSlots() {
@@ -532,14 +615,44 @@ function renderQuest() {
 	const bar = $("#quest-bar");
 	if (!q) { bar.hidden = true; return; }
 	const cat = categoryInfo(CATEGORY_MAP[norm(q.name)] || "diger");
-	$("#quest-text").textContent = `🎯 Hedef: ${q.emoji} ${q.name} (${cat.emoji} ${cat.name})`;
+	$("#quest-text").textContent = `🎯 ${t("goal")}: ${q.emoji} ${q.name} (${cat.emoji} ${cat.name})`;
 	bar.hidden = false;
 }
 
 $("#quest-skip").addEventListener("click", () => {
 	DB.write("quest", pickQuest());
 	renderQuest();
-	toast("🎯 Yeni hedef belirlendi");
+	toast(currentLang() === "en" ? "🎯 New goal set" : "🎯 Yeni hedef belirlendi");
+});
+
+/* Hedefin görünür adı: keşfedildiyse kayıtlı ad, değilse ilk harfi büyük. */
+function displayName(normName) {
+	const e = getElement(normName);
+	if (e) return e.name;
+	return normName.charAt(0).toLocaleUpperCase("tr") + normName.slice(1);
+}
+
+/* Gizli bileşen için ipucu: kategori + ilk harf (tamamını vermez). */
+function secretClue(normName) {
+	const ci = categoryInfo(CATEGORY_MAP[normName] || "diger");
+	const first = normName.charAt(0).toLocaleUpperCase("tr");
+	return `${ci.emoji} ${first}…`;
+}
+
+/* İpucu: hedefi üreten bilinen bir tarifi bulur; bir bileşeni açık, diğerini
+   kategori + ilk harf olarak gösterir (havuz/yerleşik tariflerden, AI'sız). */
+$("#quest-hint").addEventListener("click", () => {
+	const q = currentQuest();
+	if (!q) return;
+	const pool = { ...SEED_RECIPES, ...COMMUNITY_RECIPES };
+	const entry = Object.entries(pool).find(([, r]) => r && r.name && norm(r.name) === norm(q.name));
+	if (!entry) { toast(t("hintNoRecipe"), "", 4000); return; }
+	const [a, b] = entry[0].split("++");
+	const haveA = !!getElement(a), haveB = !!getElement(b);
+	// Oyuncunun zaten sahip olduğu bileşeni açık göster, diğerini ipucu yap.
+	let known, secret;
+	if (haveB && !haveA) { known = b; secret = a; } else { known = a; secret = b; }
+	toast(`💡 ${q.emoji} ${q.name} = ${displayName(known)} + ${secretClue(secret)}`, "gold", 6000);
 });
 
 /* ---------- Başlık butonları ---------- */
@@ -581,10 +694,10 @@ $("#btn-book").addEventListener("click", () => {
 	const worldFirsts = Object.values(Store.elements).filter((e) => e.firstBy && e.firstBy === me).length;
 	// "dünya ilki" değeri liderlik tablosu yüklenince kesinleşir (id ile güncellenir).
 	$("#book-stats").innerHTML = `
-		<div class="stat"><b>${stats.discoveries}</b><span>element</span></div>
-		<div class="stat"><b id="stat-firsts">${worldFirsts}</b><span>🥇 dünya ilki</span></div>
-		<div class="stat"><b>${stats.combos}</b><span>birleştirme</span></div>
-		<div class="stat"><b>${maxDepth}</b><span>en derin zincir</span></div>`;
+		<div class="stat"><b>${stats.discoveries}</b><span>${t("statElement")}</span></div>
+		<div class="stat"><b id="stat-firsts">${worldFirsts}</b><span>${t("statFirst")}</span></div>
+		<div class="stat"><b>${stats.combos}</b><span>${t("statCombo")}</span></div>
+		<div class="stat"><b>${maxDepth}</b><span>${t("statDeepest")}</span></div>`;
 
 	const earned = Store.badges;
 	$("#badge-grid").innerHTML = BADGES.map((b) => `
@@ -593,27 +706,188 @@ $("#btn-book").addEventListener("click", () => {
 			<span class="b-name">${b.name}</span>
 			<span class="b-goal">${b.goal}</span>
 		</div>`).join("");
+	renderCollections();
 
 	// Modal hemen açılsın; ağır liste ve liderlik sonraki kareye ertelenir.
 	$("#modal-book").hidden = false;
 	requestAnimationFrame(() => {
-		const list = $("#book-list");
-		const frag = document.createDocumentFragment();
-		elementList().forEach((e) => {
-			const li = document.createElement("li");
-			li.dataset.name = e.name;
-			const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
-			const from = e.fromPair ? `${e.fromPair[0]} + ${e.fromPair[1]}` : "başlangıç";
-			const first = e.firstBy ? ` <span class="first-tag">🥇 ${escapeHtml(e.firstBy)}</span>` : "";
-			li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}${first}</span>
-				<span class="sub">${escapeHtml(from)} — ${date}</span>`;
-			frag.appendChild(li);
-		});
-		list.innerHTML = "";
-		list.appendChild(frag);
+		renderBookReset();
 		renderLeaderboard();
+		renderCatLeaderboard();
+		renderActivityFeed();
 	});
 });
+
+/* Keşif listesi sayfalı yüklenir: çok büyük koleksiyonlarda binlerce DOM düğümü
+   tek seferde basmaz; "Daha fazla göster" ile parça parça eklenir. */
+const BOOK_PAGE = 80;
+let _bookItems = [], _bookShown = 0;
+
+function renderBookReset() {
+	_bookItems = elementList();
+	_bookShown = 0;
+	$("#book-list").innerHTML = "";
+	renderBookMore();
+}
+
+function renderBookMore() {
+	const en = currentLang() === "en";
+	const loc = en ? "en-US" : "tr-TR";
+	const frag = document.createDocumentFragment();
+	const end = Math.min(_bookShown + BOOK_PAGE, _bookItems.length);
+	for (let i = _bookShown; i < end; i++) {
+		const e = _bookItems[i];
+		const li = document.createElement("li");
+		li.dataset.name = e.name;
+		const date = new Date(e.discoveredAt).toLocaleDateString(loc, { day: "numeric", month: "long" });
+		const from = e.fromPair ? `${e.fromPair[0]} + ${e.fromPair[1]}` : t("startEl2");
+		const first = e.firstBy ? ` <span class="first-tag">🥇 ${escapeHtml(e.firstBy)}</span>` : "";
+		li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}${first}</span>
+			<span class="sub">${escapeHtml(from)} — ${date}</span>`;
+		frag.appendChild(li);
+	}
+	$("#book-list").appendChild(frag);
+	_bookShown = end;
+	$("#btn-book-more").hidden = _bookShown >= _bookItems.length;
+}
+
+$("#btn-book-more").addEventListener("click", renderBookMore);
+
+/* Koleksiyon ilerlemesi: her set için bulunan/toplam ve eksik üyeler. */
+function renderCollections() {
+	const grid = $("#collection-grid");
+	grid.innerHTML = COLLECTIONS.map((col) => {
+		const p = collectionProgress(col);
+		const pct = Math.round((p.found / p.total) * 100);
+		const missing = p.missing.slice(0, 4).map(escapeHtml).join(", ")
+			+ (p.missing.length > 4 ? "…" : "");
+		return `<div class="coll-card ${p.done ? "coll-done" : ""}">
+			<div class="coll-head"><span>${col.emoji} ${escapeHtml(col.name)}</span><span class="coll-count">${p.found}/${p.total}${p.done ? " ✓" : ""}</span></div>
+			<div class="coll-bar"><div class="coll-fill" style="width:${pct}%"></div></div>
+			<div class="coll-sub">${p.done ? escapeHtml(col.desc) : (currentLang() === "en" ? "Missing: " : "Eksik: ") + missing}</div>
+		</div>`;
+	}).join("");
+}
+
+/* Kategori şampiyonları: havuzdaki ilk-keşifleri kategoriye göre sayıp her
+   kategorinin en çok ilk keşfe sahip oyuncusunu gösterir. Tamamen havuzdan
+   (COMMUNITY_RECIPES) türetilir — sunucuda ek bir uç gerekmez. */
+function renderCatLeaderboard() {
+	const box = $("#cat-leaderboard");
+	// kategori → { oyuncu: sayı }
+	const perCat = {};
+	for (const r of Object.values(COMMUNITY_RECIPES)) {
+		if (!r || !r.by) continue;
+		const cat = r.cat || "diger";
+		(perCat[cat] = perCat[cat] || {})[r.by] = (perCat[cat]?.[r.by] || 0) + 1;
+	}
+	const me = getNickname();
+	const rows = CATEGORIES.filter((c) => perCat[c.id]).map((c) => {
+		const [name, count] = Object.entries(perCat[c.id]).sort((a, b) => b[1] - a[1])[0];
+		const mine = name === me ? " lb-me" : "";
+		return `<li class="${mine.trim()}"><span class="lb-rank">${c.emoji}</span><span class="lb-name">${escapeHtml(c.name)}</span><span class="lb-champ" data-profile="${escapeHtml(name)}">${escapeHtml(name)}</span><span class="lb-count">${count} 🥇</span></li>`;
+	});
+	box.innerHTML = rows.length
+		? `<ol class="lb-list">${rows.join("")}</ol>`
+		: `<p class="muted">${currentLang() === "en" ? "No category champions yet." : "Henüz kategori şampiyonu yok."}</p>`;
+}
+
+/* Son keşifler akışı: havuzdaki tarifleri tarihe göre sıralayıp en yeni
+   ilk-keşifleri "X az önce Y'yi buldu" biçiminde listeler. */
+function renderActivityFeed() {
+	const box = $("#activity-feed");
+	const en = currentLang() === "en";
+	const recent = Object.values(COMMUNITY_RECIPES)
+		.filter((r) => r && r.by && r.at)
+		.sort((a, b) => new Date(b.at) - new Date(a.at))
+		.slice(0, 12);
+	if (!recent.length) {
+		box.innerHTML = `<p class="muted">${en ? "No discoveries yet." : "Henüz keşif yok."}</p>`;
+		return;
+	}
+	const me = getNickname();
+	box.innerHTML = `<ul class="feed-list">${recent.map((r) => {
+		const when = timeAgo(r.at, en);
+		const found = en ? "discovered" : "keşfetti";
+		const mine = r.by === me ? " feed-me" : "";
+		return `<li class="${mine.trim()}"><span>${r.emoji || "✨"}</span>
+			<span class="feed-text"><b data-profile="${escapeHtml(r.by)}">${escapeHtml(r.by)}</b> ${found} <b>${escapeHtml(r.name)}</b></span>
+			<span class="feed-when">${when}</span></li>`;
+	}).join("")}</ul>`;
+}
+
+/* Göreli zaman ("3 dk önce" / "3m ago"). */
+function timeAgo(iso, en) {
+	const diff = Date.now() - new Date(iso).getTime();
+	if (isNaN(diff)) return "";
+	const m = Math.floor(diff / 60000);
+	if (m < 1) return en ? "just now" : "az önce";
+	if (m < 60) return en ? `${m}m ago` : `${m} dk önce`;
+	const h = Math.floor(m / 60);
+	if (h < 24) return en ? `${h}h ago` : `${h} sa önce`;
+	const d = Math.floor(h / 24);
+	return en ? `${d}d ago` : `${d} gün önce`;
+}
+
+/* ---------- Oyuncu profili (herkese açık, havuzdan türetilir) ---------- */
+
+function openProfile(name) {
+	const en = currentLang() === "en";
+	// Bu oyuncunun havuzdaki tüm ilk-keşifleri.
+	const firsts = Object.values(COMMUNITY_RECIPES).filter((r) => r && r.by === name);
+	$("#profile-title").textContent = `👤 ${name}`;
+	if (!firsts.length) {
+		$("#profile-body").innerHTML = `<p class="muted">${t("profileNone")}</p>`;
+		$("#modal-profile").hidden = false;
+		return;
+	}
+	// Kategori dağılımı.
+	const catCounts = {};
+	firsts.forEach((r) => { const c = r.cat || "diger"; catCounts[c] = (catCounts[c] || 0) + 1; });
+	const cats = Object.entries(catCounts).sort((a, b) => b[1] - a[1])
+		.map(([id, n]) => { const ci = categoryInfo(id); return `<span class="prof-cat">${ci.emoji} ${escapeHtml(ci.name)} ${n}</span>`; }).join("");
+	// Son ilk keşifleri.
+	const recent = firsts.filter((r) => r.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 8);
+	const recentHtml = recent.map((r) =>
+		`<li><span>${r.emoji || "✨"}</span><span>${escapeHtml(r.name)}</span><span class="sub">${timeAgo(r.at, en)}</span></li>`).join("");
+	$("#profile-body").innerHTML = `
+		<div class="stats-row">
+			<div class="stat"><b>${firsts.length}</b><span>${t("profileFirsts")}</span></div>
+			<div class="stat"><b>${Object.keys(catCounts).length}</b><span>${t("profileCats")}</span></div>
+		</div>
+		<div class="prof-cats">${cats}</div>
+		<h3>${t("profileRecent")}</h3>
+		<ul class="item-list">${recentHtml}</ul>`;
+	$("#modal-profile").hidden = false;
+}
+
+/* Liderlik / kategori / akıştaki oyuncu adına tıklayınca profili aç. */
+$("#modal-book").addEventListener("click", (ev) => {
+	const p = ev.target.closest("[data-profile]");
+	if (p) openProfile(p.dataset.profile);
+});
+
+/* ---------- Koleksiyon tamamlanma kutlaması ---------- */
+
+/* Yeni tamamlanan koleksiyonları (daha önce kutlanmamış) bulup kutlar. */
+function checkCollections() {
+	const claimed = DB.read("collectionsClaimed", []);
+	let changed = false;
+	COLLECTIONS.forEach((col) => {
+		if (claimed.includes(col.id)) return;
+		if (collectionProgress(col).done) {
+			claimed.push(col.id);
+			changed = true;
+			const en = currentLang() === "en";
+			setTimeout(() => {
+				toast(`${col.emoji} ${en ? "Collection complete" : "Koleksiyon tamamlandı"}: ${col.name}!`, "gold", 5000);
+				confetti();
+				sfx("first");
+			}, 1400);
+		}
+	});
+	if (changed) DB.write("collectionsClaimed", claimed);
+}
 
 /* Liderlik tablosu: havuzdan en çok "dünya ilki" keşfe sahip oyuncular. */
 async function renderLeaderboard() {
@@ -635,7 +909,7 @@ async function renderLeaderboard() {
 				+ '<ol class="lb-list">' + data.top.map((u, i) => {
 					const mine = u.name === me ? " lb-me" : "";
 					const rank = medals[i] || `${i + 1}.`;
-					return `<li class="${mine.trim()}"><span class="lb-rank">${rank}</span><span class="lb-name">${escapeHtml(u.name)}</span><span class="lb-count">${u.count} 🥇</span></li>`;
+					return `<li class="${mine.trim()}"><span class="lb-rank">${rank}</span><span class="lb-name" data-profile="${escapeHtml(u.name)}">${escapeHtml(u.name)}</span><span class="lb-count">${u.count} 🥇</span></li>`;
 				}).join("") + "</ol>";
 		}
 	} catch {
@@ -660,9 +934,25 @@ function fmtEl(name) {
 	return e ? `${e.emoji} ${escapeHtml(e.name)}` : escapeHtml(name);
 }
 
+let detailName = "";
+
+function renderDetailImage() {
+	const box = $("#detail-image-box");
+	const btn = $("#btn-gen-image");
+	const img = Store.images[norm(detailName)];
+	if (img) {
+		box.innerHTML = `<img class="element-img" src="${img}" alt="${escapeHtml(detailName)}">`;
+		btn.textContent = t("regenImage");
+	} else {
+		box.innerHTML = "";
+		btn.textContent = t("genImage");
+	}
+}
+
 function openDetail(name) {
 	const e = getElement(name);
 	if (!e) return;
+	detailName = e.name;
 	$("#detail-title").textContent = `${e.emoji} ${e.name}`;
 	$("#detail-desc").textContent = e.desc || "";
 	$("#detail-desc").hidden = !e.desc;
@@ -695,8 +985,37 @@ function openDetail(name) {
 			lin.appendChild(li);
 		});
 	}
+	renderDetailImage();
 	$("#modal-detail").hidden = false;
 }
+
+/* İstek üzerine element görseli üret (kendi Gemini anahtarıyla), cihazda sakla. */
+$("#btn-gen-image").addEventListener("click", async () => {
+	if (!detailName) return;
+	const e = getElement(detailName);
+	if (!e) return;
+	if (!Store.settings.geminiKey) { toast(t("genImageNeedsKey"), "error", 4500); return; }
+	const btn = $("#btn-gen-image");
+	btn.disabled = true;
+	btn.textContent = t("genImageWait");
+	try {
+		const dataUrl = await generateElementImage(e);
+		const imgs = Store.images;
+		// Görseller büyüktür (base64); localStorage kotasını korumak için en
+		// fazla son 24 görseli sakla (en eskiyi düşür). Aksi halde kota dolunca
+		// oyun ilerlemesi yazımları da sessizce başarısız olabilirdi.
+		const keys = Object.keys(imgs);
+		if (keys.length >= 24 && !imgs[norm(detailName)]) delete imgs[keys[0]];
+		imgs[norm(detailName)] = dataUrl;
+		Store.images = imgs;
+		renderDetailImage();
+	} catch (err) {
+		toast(err.message === "NO_KEY" ? t("genImageNeedsKey") : t("genImageFail"), "error", 4500);
+		renderDetailImage();
+	} finally {
+		btn.disabled = false;
+	}
+});
 
 $("#book-list").addEventListener("click", (ev) => {
 	const li = ev.target.closest("li[data-name]");
@@ -803,6 +1122,7 @@ function openSettings(hint = "") {
 		? "🌐 Küresel havuz bağlı — tüm oyuncuların keşifleri ortak bellekte birikiyor; sizin bir şey yapmanız gerekmiyor."
 		: "Havuz henüz kurulmadı. Site sahibi kurduğunda otomatik bağlanacaksınız — oyuncuların bir şey yapması gerekmez.";
 	$("#sound-toggle").checked = s.sound !== false;
+	$("#lang-select").value = currentLang();
 	const mem = Store.memory;
 	const learned = Object.keys(Store.recipes).length;
 	const community = Object.keys(COMMUNITY_RECIPES).length;
@@ -820,6 +1140,15 @@ $("#sound-toggle").addEventListener("change", () => {
 	if ($("#sound-toggle").checked) sfx("discover");
 });
 
+/* Dil değişimi: kaydet, statik metinleri yeniden uygula, görünür alanları çiz. */
+$("#lang-select").addEventListener("change", () => {
+	Store.settings = { ...Store.settings, lang: $("#lang-select").value };
+	applyStaticI18n();
+	renderSlots();
+	renderQuest();
+	renderChips();
+});
+
 $("#btn-settings").addEventListener("click", () => openSettings());
 $("#ai-provider").addEventListener("change", syncProviderRows);
 
@@ -835,7 +1164,7 @@ $("#btn-save-key").addEventListener("click", () => {
 		poolUrl: newPool,
 	};
 	updateKeyStatus();
-	toast("Ayarlar kaydedildi ✓");
+	toast(t("settingsSaved"));
 	// Havuz adresi değiştiyse hemen indir ve hedef adaylarını tazele.
 	if (newPool && newPool !== oldPool) {
 		loadCommunityRecipes().then(() => {
@@ -914,6 +1243,7 @@ $$(".modal").forEach((m) => {
 /* ---------- Başlangıç ---------- */
 
 async function init() {
+	applyStaticI18n();
 	seedBaseElements();
 
 	// Paylaşılan topluluk tariflerini (ve varsa küresel havuzu) indir;
