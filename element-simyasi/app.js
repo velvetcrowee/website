@@ -1240,6 +1240,47 @@ $$(".modal").forEach((m) => {
 	});
 });
 
+/* ---------- Mobil: tuval/panel ayracı (sürükleyerek yeniden boyutlandırma) ----------
+   Kullanıcı tutamağı yukarı/aşağı sürükleyerek panelin kapladığı alanı ayarlar;
+   tercih kaydedilir. Yalnızca mobilde (≤920px) görünür. */
+
+const vsplitEl = $("#vsplit");
+
+// Kayıtlı oran varsa uygula (açılışta).
+{
+	const savedH = DB.read("wsHeight", null);
+	if (savedH) document.documentElement.style.setProperty("--ws-h", savedH);
+}
+
+let splitDragging = false;
+
+vsplitEl.addEventListener("pointerdown", (ev) => {
+	splitDragging = true;
+	vsplitEl.classList.add("dragging");
+	try { vsplitEl.setPointerCapture(ev.pointerId); } catch { /* desteklenmiyor */ }
+	ev.preventDefault();
+});
+
+vsplitEl.addEventListener("pointermove", (ev) => {
+	if (!splitDragging) return;
+	const g = $("#game").getBoundingClientRect();
+	if (!g.height) return;
+	// Tuval yüksekliği = parmağın oyun alanı içindeki dikey konumu (oran olarak).
+	let pct = ((ev.clientY - g.top) / g.height) * 100;
+	pct = Math.max(12, Math.min(78, pct)); // tuval %12–%78 arası kalsın
+	document.documentElement.style.setProperty("--ws-h", pct.toFixed(1) + "%");
+});
+
+function endSplitDrag(ev) {
+	if (!splitDragging) return;
+	splitDragging = false;
+	vsplitEl.classList.remove("dragging");
+	try { vsplitEl.releasePointerCapture(ev.pointerId); } catch { /* yok say */ }
+	DB.write("wsHeight", document.documentElement.style.getPropertyValue("--ws-h").trim());
+}
+vsplitEl.addEventListener("pointerup", endSplitDrag);
+vsplitEl.addEventListener("pointercancel", endSplitDrag);
+
 /* ---------- Başlangıç ---------- */
 
 async function init() {
