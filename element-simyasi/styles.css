@@ -565,14 +565,15 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 
 @media (max-width: 920px) {
 	#game { flex-direction: column; }
-	/* Yüzde tabanlı bölünme (vh/dvh değil) — sabit yükseklikli gövdede stabil. */
-	#workspace { flex: 0 0 32%; }
+	/* Yüzde tabanlı bölünme (vh/dvh değil) — sabit yükseklikli gövdede stabil.
+	   --ws-h: kullanıcı ayraçtan sürükleyince ayarlanır, tercih kaydedilir. */
+	#workspace { flex: 0 0 var(--ws-h, 32%); }
 	#panel {
 		width: 100%;
 		flex: 1 1 0;
 		min-height: 0;
 		border-left: none;
-		border-top: 1px solid #334155;
+		border-top: none;
 	}
 	.app-header { padding: 8px 12px; gap: 8px; }
 	.app-header h1 { font-size: 1rem; }
@@ -581,9 +582,37 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 	#panel { padding: 8px; gap: 6px; }
 }
 
+/* Mobil: tuval ile panel arasında sürüklenebilir ayraç. Kullanıcı parmağıyla
+   yukarı/aşağı çekerek panelin kapladığı alanı istediği gibi ayarlar. */
+#vsplit { display: none; }
+@media (max-width: 920px) {
+	#vsplit {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex: 0 0 20px;
+		background: var(--card);
+		border-top: 1px solid #334155;
+		border-bottom: 1px solid #334155;
+		touch-action: none;
+		cursor: row-resize;
+		user-select: none;
+		-webkit-user-select: none;
+	}
+	#vsplit .vsplit-grip {
+		width: 44px;
+		height: 5px;
+		border-radius: 999px;
+		background: var(--muted);
+		opacity: 0.55;
+		transition: opacity 0.15s, background 0.15s;
+	}
+	#vsplit.dragging .vsplit-grip { opacity: 1; background: var(--accent); }
+}
+
 /* Manzara telefon (geniş ama kısa): tuval şeridi inceltilip panele yer açılır. */
 @media (max-width: 920px) and (orientation: landscape) {
-	#workspace { flex: 0 0 24%; }
+	#workspace { flex: 0 0 var(--ws-h, 24%); }
 	.app-header { padding: 6px 12px; }
 }
 
