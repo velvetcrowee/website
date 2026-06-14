@@ -1,61 +1,35 @@
-<div>
-	<p align="center">
-		<img src="./src/.vuepress/public/icons/logo.png" height="100px">
-	</p>
-	<h1 align="center">Tachiyomi Website</h1>
-	<p align="center">
-		<a href="https://discord.gg/tachiyomi">
-			<img src="https://img.shields.io/discord/349436576037732353.svg?label=Discord&labelColor=7289da&color=2c2f33&style=flat" alt="Discord">
-		</a>
-	</p>
-</div>
+# Oyunlar
 
-## Contributing
+Bu depo, GitHub Pages üzerinde yayınlanan iki web tabanlı uygulamayı barındırır.
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+## 🧪 Element Simyası
 
-- [Code of Conduct](./CODE_OF_CONDUCT.md)
-- [Contributing guide](./CONTRIBUTING.md)
-- [Project style guide](https://tachiyomi.org/sandbox/style-guide/)
+Infinite Craft tarzı, Türkçe, sonsuz element birleştirme oyunu. Ateş, Su,
+Toprak ve Hava ile başlayıp yapay zekâ destekli sınırsız yeni kavramlar
+keşfedersiniz. Topluluk havuzu, üyelik, liderlik, rozetler, koleksiyonlar ve
+çoklu dil desteği içerir.
 
-If you got any questions, [join our Discord server](https://discord.gg/tachiyomi).
+- **Oyna:** https://velvetcrowee.github.io/website/element-simyasi/
+- **Kaynak:** [`element-simyasi/`](./element-simyasi/)
+- **Sunucu (Cloudflare Worker):** [`cloudflare-worker/`](./cloudflare-worker/) —
+  küresel tarif havuzu, üyelik ve bulut kayıt.
 
-## Repositories
+## 🏋️ Fitness Uygulaması
 
-<div>
-	<p align="center">
-		<a href="https://github.com/tachiyomiorg/tachiyomi/">
-			<img src="https://github-readme-stats.vercel.app/api/pin/?username=tachiyomiorg&repo=tachiyomi&bg_color=0000&text_color=777&hide_border=true" alt="Android App">
-		</a>
-		<a href="https://github.com/tachiyomiorg/tachiyomi-extensions/">
-			<img src="https://github-readme-stats.vercel.app/api/pin/?username=tachiyomiorg&repo=tachiyomi-extensions&bg_color=0000&text_color=777&hide_border=true" alt="App Extensions">
-		</a>
-	</p>
-</div>
+- **Aç:** https://velvetcrowee.github.io/website/
+- **Kaynak:** [`fitness-app/`](./fitness-app/)
 
-<div>
-	<p align="center">
-		<a href="https://github.com/tachiyomiorg/tachiyomi-1.x/">
-			<img src="https://github-readme-stats.vercel.app/api/pin/?username=tachiyomiorg&repo=tachiyomi-1.x&bg_color=0000&text_color=777&hide_border=true alt="Android App (Rewrite)">
-		</a>
-		<a href="https://github.com/tachiyomiorg/tachiyomi-extensions-1.x/">
-			<img src="https://github-readme-stats.vercel.app/api/pin/?username=tachiyomiorg&repo=tachiyomi-extensions-1.x&bg_color=0000&text_color=777&hide_border=true" alt="App Extensions (Rewrite)">
-		</a>
-	</p>
-</div>
+## Geliştirme
 
-## License
+Build adımı yoktur (vanilla JS PWA'lar). Depo kökünden:
 
-	Copyright (C) 2018 The Tachiyomi Open Source Project
+```sh
+python3 -m http.server 8000
+# Oyun:    http://localhost:8000/element-simyasi/
+# Fitness: http://localhost:8000/fitness-app/
+```
 
-	This Source Code Form is subject to the terms of the Mozilla Public
-	License, v. 2.0. If a copy of the MPL was not distributed with this
-	file, You can obtain one at http://mozilla.org/MPL/2.0/.
+## Dağıtım
 
-## Credits
-
-Thank you to all the people who have already contributed!
-
-<a href="https://github.com/tachiyomiorg/website/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=tachiyomiorg/website" />
-</a>
+`.github/workflows/fitness-app-pages.yml` her iki uygulamayı `_site/` altında
+birleştirip GitHub Pages'e yayınlar (master'a push'ta tetiklenir).
