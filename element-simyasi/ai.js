@@ -342,6 +342,40 @@ function mockCombine(a, b) {
 	};
 }
 
+/* ---------- Element görseli (Gemini görsel üretimi) ----------
+   Oyuncunun kendi Gemini anahtarıyla, istek üzerine tek bir element görseli
+   üretir; sonuç data URL olarak döner ve cihazda önbelleğe alınır (tekrar
+   üretilmez). Havuz sunucusunda görsel ucu olmadığından bu özellik yalnızca
+   kendi Gemini anahtarı olan oyuncular için çalışır. */
+const GEMINI_IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation";
+
+async function generateElementImage(el) {
+	const apiKey = Store.settings.geminiKey;
+	if (!apiKey) throw new Error("NO_KEY");
+	const prompt = `"${el.name}" kavramını temsil eden, renkli, parlak, oyun ikonu/sticker tarzında, sade ve tek renkli arka planlı küçük bir illüstrasyon üret. Yazı ekleme.`;
+	const res = await fetch(
+		`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent`,
+		{
+			method: "POST",
+			headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+			body: JSON.stringify({
+				contents: [{ role: "user", parts: [{ text: prompt }] }],
+				generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+			}),
+		}
+	);
+	if (!res.ok) {
+		let msg = `Görsel API hatası (${res.status})`;
+		try { const err = await res.json(); if (err.error?.message) msg = err.error.message; } catch { /* gövde yok */ }
+		throw new Error(msg);
+	}
+	const data = await res.json();
+	const parts = data.candidates?.[0]?.content?.parts || [];
+	const img = parts.find((p) => p.inlineData && p.inlineData.data);
+	if (!img) throw new Error("Görsel üretilemedi.");
+	return `data:${img.inlineData.mimeType || "image/png"};base64,${img.inlineData.data}`;
+}
+
 /* ---------- Üyelik (havuz sunucusu üzerinden) ---------- */
 
 async function accountRequest(path, payload) {

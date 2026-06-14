@@ -3,13 +3,15 @@
    görünür), ağ yoksa önbellekteki kopya sunulur. API istekleri her zaman ağa
    gider. */
 
-const CACHE = "simya-v22";
+const CACHE = "simya-v23";
 const ASSETS = [
 	"./",
 	"./index.html",
 	"./styles.css",
 	"./data.js",
+	"./i18n.js",
 	"./categories.js",
+	"./collections.js",
 	"./seed.js",
 	"./ai.js",
 	"./game.js",

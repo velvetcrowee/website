@@ -59,6 +59,8 @@ const STRINGS = {
 		questHint: "💡 İpucu",
 		hintNoRecipe: "Bu hedef için bilinen bir tarif yok — yaratıcı ol!",
 		hintReveal: "💡 İpucu",
+		goal: "Hedef",
+		settingsSaved: "Ayarlar kaydedildi ✓",
 		// Ayarlar
 		settingsTitle: "⚙️ Ayarlar",
 		profileMembership: "Profil & Üyelik",
@@ -122,6 +124,8 @@ const STRINGS = {
 		questHint: "💡 Hint",
 		hintNoRecipe: "No known recipe for this goal — get creative!",
 		hintReveal: "💡 Hint",
+		goal: "Goal",
+		settingsSaved: "Settings saved ✓",
 		settingsTitle: "⚙️ Settings",
 		profileMembership: "Profile & Account",
 		aiHeading: "Artificial Intelligence",

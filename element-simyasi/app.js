@@ -104,6 +104,7 @@ function announceResult(res) {
 		}, 600);
 	}
 	if (!res.discovered) { sfx("merge"); return; }
+	checkCollections();
 	if (res.isNew) {
 		toast(`🏆 İlk Keşif: ${res.emoji} ${res.name}`, "gold", 4500);
 		confetti();
@@ -478,7 +479,7 @@ function clearSlots() {
 
 function slotLabel(name) {
 	const e = name && getElement(name);
-	return e ? `${e.emoji} ${e.name}` : "＋ Seç";
+	return e ? `${e.emoji} ${e.name}` : t("slotPick");
 }
 
 function renderSlots() {
@@ -550,14 +551,44 @@ function renderQuest() {
 	const bar = $("#quest-bar");
 	if (!q) { bar.hidden = true; return; }
 	const cat = categoryInfo(CATEGORY_MAP[norm(q.name)] || "diger");
-	$("#quest-text").textContent = `🎯 Hedef: ${q.emoji} ${q.name} (${cat.emoji} ${cat.name})`;
+	$("#quest-text").textContent = `🎯 ${t("goal")}: ${q.emoji} ${q.name} (${cat.emoji} ${cat.name})`;
 	bar.hidden = false;
 }
 
 $("#quest-skip").addEventListener("click", () => {
 	DB.write("quest", pickQuest());
 	renderQuest();
-	toast("🎯 Yeni hedef belirlendi");
+	toast(currentLang() === "en" ? "🎯 New goal set" : "🎯 Yeni hedef belirlendi");
+});
+
+/* Hedefin görünür adı: keşfedildiyse kayıtlı ad, değilse ilk harfi büyük. */
+function displayName(normName) {
+	const e = getElement(normName);
+	if (e) return e.name;
+	return normName.charAt(0).toLocaleUpperCase("tr") + normName.slice(1);
+}
+
+/* Gizli bileşen için ipucu: kategori + ilk harf (tamamını vermez). */
+function secretClue(normName) {
+	const ci = categoryInfo(CATEGORY_MAP[normName] || "diger");
+	const first = normName.charAt(0).toLocaleUpperCase("tr");
+	return `${ci.emoji} ${first}…`;
+}
+
+/* İpucu: hedefi üreten bilinen bir tarifi bulur; bir bileşeni açık, diğerini
+   kategori + ilk harf olarak gösterir (havuz/yerleşik tariflerden, AI'sız). */
+$("#quest-hint").addEventListener("click", () => {
+	const q = currentQuest();
+	if (!q) return;
+	const pool = { ...SEED_RECIPES, ...COMMUNITY_RECIPES };
+	const entry = Object.entries(pool).find(([, r]) => r && r.name && norm(r.name) === norm(q.name));
+	if (!entry) { toast(t("hintNoRecipe"), "", 4000); return; }
+	const [a, b] = entry[0].split("++");
+	const haveA = !!getElement(a), haveB = !!getElement(b);
+	// Oyuncunun zaten sahip olduğu bileşeni açık göster, diğerini ipucu yap.
+	let known, secret;
+	if (haveB && !haveA) { known = b; secret = a; } else { known = a; secret = b; }
+	toast(`💡 ${q.emoji} ${q.name} = ${displayName(known)} + ${secretClue(secret)}`, "gold", 6000);
 });
 
 /* ---------- Başlık butonları ---------- */
@@ -599,10 +630,10 @@ $("#btn-book").addEventListener("click", () => {
 	const worldFirsts = Object.values(Store.elements).filter((e) => e.firstBy && e.firstBy === me).length;
 	// "dünya ilki" değeri liderlik tablosu yüklenince kesinleşir (id ile güncellenir).
 	$("#book-stats").innerHTML = `
-		<div class="stat"><b>${stats.discoveries}</b><span>element</span></div>
-		<div class="stat"><b id="stat-firsts">${worldFirsts}</b><span>🥇 dünya ilki</span></div>
-		<div class="stat"><b>${stats.combos}</b><span>birleştirme</span></div>
-		<div class="stat"><b>${maxDepth}</b><span>en derin zincir</span></div>`;
+		<div class="stat"><b>${stats.discoveries}</b><span>${t("statElement")}</span></div>
+		<div class="stat"><b id="stat-firsts">${worldFirsts}</b><span>${t("statFirst")}</span></div>
+		<div class="stat"><b>${stats.combos}</b><span>${t("statCombo")}</span></div>
+		<div class="stat"><b>${maxDepth}</b><span>${t("statDeepest")}</span></div>`;
 
 	const earned = Store.badges;
 	$("#badge-grid").innerHTML = BADGES.map((b) => `
@@ -611,6 +642,7 @@ $("#btn-book").addEventListener("click", () => {
 			<span class="b-name">${b.name}</span>
 			<span class="b-goal">${b.goal}</span>
 		</div>`).join("");
+	renderCollections();
 
 	// Modal hemen açılsın; ağır liste ve liderlik sonraki kareye ertelenir.
 	$("#modal-book").hidden = false;
@@ -630,8 +662,146 @@ $("#btn-book").addEventListener("click", () => {
 		list.innerHTML = "";
 		list.appendChild(frag);
 		renderLeaderboard();
+		renderCatLeaderboard();
+		renderActivityFeed();
 	});
 });
+
+/* Koleksiyon ilerlemesi: her set için bulunan/toplam ve eksik üyeler. */
+function renderCollections() {
+	const grid = $("#collection-grid");
+	grid.innerHTML = COLLECTIONS.map((col) => {
+		const p = collectionProgress(col);
+		const pct = Math.round((p.found / p.total) * 100);
+		const missing = p.missing.slice(0, 4).map(escapeHtml).join(", ")
+			+ (p.missing.length > 4 ? "…" : "");
+		return `<div class="coll-card ${p.done ? "coll-done" : ""}">
+			<div class="coll-head"><span>${col.emoji} ${escapeHtml(col.name)}</span><span class="coll-count">${p.found}/${p.total}${p.done ? " ✓" : ""}</span></div>
+			<div class="coll-bar"><div class="coll-fill" style="width:${pct}%"></div></div>
+			<div class="coll-sub">${p.done ? escapeHtml(col.desc) : (currentLang() === "en" ? "Missing: " : "Eksik: ") + missing}</div>
+		</div>`;
+	}).join("");
+}
+
+/* Kategori şampiyonları: havuzdaki ilk-keşifleri kategoriye göre sayıp her
+   kategorinin en çok ilk keşfe sahip oyuncusunu gösterir. Tamamen havuzdan
+   (COMMUNITY_RECIPES) türetilir — sunucuda ek bir uç gerekmez. */
+function renderCatLeaderboard() {
+	const box = $("#cat-leaderboard");
+	// kategori → { oyuncu: sayı }
+	const perCat = {};
+	for (const r of Object.values(COMMUNITY_RECIPES)) {
+		if (!r || !r.by) continue;
+		const cat = r.cat || "diger";
+		(perCat[cat] = perCat[cat] || {})[r.by] = (perCat[cat]?.[r.by] || 0) + 1;
+	}
+	const me = getNickname();
+	const rows = CATEGORIES.filter((c) => perCat[c.id]).map((c) => {
+		const [name, count] = Object.entries(perCat[c.id]).sort((a, b) => b[1] - a[1])[0];
+		const mine = name === me ? " lb-me" : "";
+		return `<li class="${mine.trim()}"><span class="lb-rank">${c.emoji}</span><span class="lb-name">${escapeHtml(c.name)}</span><span class="lb-champ" data-profile="${escapeHtml(name)}">${escapeHtml(name)}</span><span class="lb-count">${count} 🥇</span></li>`;
+	});
+	box.innerHTML = rows.length
+		? `<ol class="lb-list">${rows.join("")}</ol>`
+		: `<p class="muted">${currentLang() === "en" ? "No category champions yet." : "Henüz kategori şampiyonu yok."}</p>`;
+}
+
+/* Son keşifler akışı: havuzdaki tarifleri tarihe göre sıralayıp en yeni
+   ilk-keşifleri "X az önce Y'yi buldu" biçiminde listeler. */
+function renderActivityFeed() {
+	const box = $("#activity-feed");
+	const en = currentLang() === "en";
+	const recent = Object.values(COMMUNITY_RECIPES)
+		.filter((r) => r && r.by && r.at)
+		.sort((a, b) => new Date(b.at) - new Date(a.at))
+		.slice(0, 12);
+	if (!recent.length) {
+		box.innerHTML = `<p class="muted">${en ? "No discoveries yet." : "Henüz keşif yok."}</p>`;
+		return;
+	}
+	const me = getNickname();
+	box.innerHTML = `<ul class="feed-list">${recent.map((r) => {
+		const when = timeAgo(r.at, en);
+		const found = en ? "discovered" : "keşfetti";
+		const mine = r.by === me ? " feed-me" : "";
+		return `<li class="${mine.trim()}"><span>${r.emoji || "✨"}</span>
+			<span class="feed-text"><b data-profile="${escapeHtml(r.by)}">${escapeHtml(r.by)}</b> ${found} <b>${escapeHtml(r.name)}</b></span>
+			<span class="feed-when">${when}</span></li>`;
+	}).join("")}</ul>`;
+}
+
+/* Göreli zaman ("3 dk önce" / "3m ago"). */
+function timeAgo(iso, en) {
+	const diff = Date.now() - new Date(iso).getTime();
+	if (isNaN(diff)) return "";
+	const m = Math.floor(diff / 60000);
+	if (m < 1) return en ? "just now" : "az önce";
+	if (m < 60) return en ? `${m}m ago` : `${m} dk önce`;
+	const h = Math.floor(m / 60);
+	if (h < 24) return en ? `${h}h ago` : `${h} sa önce`;
+	const d = Math.floor(h / 24);
+	return en ? `${d}d ago` : `${d} gün önce`;
+}
+
+/* ---------- Oyuncu profili (herkese açık, havuzdan türetilir) ---------- */
+
+function openProfile(name) {
+	const en = currentLang() === "en";
+	// Bu oyuncunun havuzdaki tüm ilk-keşifleri.
+	const firsts = Object.values(COMMUNITY_RECIPES).filter((r) => r && r.by === name);
+	$("#profile-title").textContent = `👤 ${name}`;
+	if (!firsts.length) {
+		$("#profile-body").innerHTML = `<p class="muted">${t("profileNone")}</p>`;
+		$("#modal-profile").hidden = false;
+		return;
+	}
+	// Kategori dağılımı.
+	const catCounts = {};
+	firsts.forEach((r) => { const c = r.cat || "diger"; catCounts[c] = (catCounts[c] || 0) + 1; });
+	const cats = Object.entries(catCounts).sort((a, b) => b[1] - a[1])
+		.map(([id, n]) => { const ci = categoryInfo(id); return `<span class="prof-cat">${ci.emoji} ${escapeHtml(ci.name)} ${n}</span>`; }).join("");
+	// Son ilk keşifleri.
+	const recent = firsts.filter((r) => r.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 8);
+	const recentHtml = recent.map((r) =>
+		`<li><span>${r.emoji || "✨"}</span><span>${escapeHtml(r.name)}</span><span class="sub">${timeAgo(r.at, en)}</span></li>`).join("");
+	$("#profile-body").innerHTML = `
+		<div class="stats-row">
+			<div class="stat"><b>${firsts.length}</b><span>${t("profileFirsts")}</span></div>
+			<div class="stat"><b>${Object.keys(catCounts).length}</b><span>${t("profileCats")}</span></div>
+		</div>
+		<div class="prof-cats">${cats}</div>
+		<h3>${t("profileRecent")}</h3>
+		<ul class="item-list">${recentHtml}</ul>`;
+	$("#modal-profile").hidden = false;
+}
+
+/* Liderlik / kategori / akıştaki oyuncu adına tıklayınca profili aç. */
+$("#modal-book").addEventListener("click", (ev) => {
+	const p = ev.target.closest("[data-profile]");
+	if (p) openProfile(p.dataset.profile);
+});
+
+/* ---------- Koleksiyon tamamlanma kutlaması ---------- */
+
+/* Yeni tamamlanan koleksiyonları (daha önce kutlanmamış) bulup kutlar. */
+function checkCollections() {
+	const claimed = DB.read("collectionsClaimed", []);
+	let changed = false;
+	COLLECTIONS.forEach((col) => {
+		if (claimed.includes(col.id)) return;
+		if (collectionProgress(col).done) {
+			claimed.push(col.id);
+			changed = true;
+			const en = currentLang() === "en";
+			setTimeout(() => {
+				toast(`${col.emoji} ${en ? "Collection complete" : "Koleksiyon tamamlandı"}: ${col.name}!`, "gold", 5000);
+				confetti();
+				sfx("first");
+			}, 1400);
+		}
+	});
+	if (changed) DB.write("collectionsClaimed", claimed);
+}
 
 /* Liderlik tablosu: havuzdan en çok "dünya ilki" keşfe sahip oyuncular. */
 async function renderLeaderboard() {
@@ -653,7 +823,7 @@ async function renderLeaderboard() {
 				+ '<ol class="lb-list">' + data.top.map((u, i) => {
 					const mine = u.name === me ? " lb-me" : "";
 					const rank = medals[i] || `${i + 1}.`;
-					return `<li class="${mine.trim()}"><span class="lb-rank">${rank}</span><span class="lb-name">${escapeHtml(u.name)}</span><span class="lb-count">${u.count} 🥇</span></li>`;
+					return `<li class="${mine.trim()}"><span class="lb-rank">${rank}</span><span class="lb-name" data-profile="${escapeHtml(u.name)}">${escapeHtml(u.name)}</span><span class="lb-count">${u.count} 🥇</span></li>`;
 				}).join("") + "</ol>";
 		}
 	} catch {
@@ -678,9 +848,25 @@ function fmtEl(name) {
 	return e ? `${e.emoji} ${escapeHtml(e.name)}` : escapeHtml(name);
 }
 
+let detailName = "";
+
+function renderDetailImage() {
+	const box = $("#detail-image-box");
+	const btn = $("#btn-gen-image");
+	const img = Store.images[norm(detailName)];
+	if (img) {
+		box.innerHTML = `<img class="element-img" src="${img}" alt="${escapeHtml(detailName)}">`;
+		btn.textContent = t("regenImage");
+	} else {
+		box.innerHTML = "";
+		btn.textContent = t("genImage");
+	}
+}
+
 function openDetail(name) {
 	const e = getElement(name);
 	if (!e) return;
+	detailName = e.name;
 	$("#detail-title").textContent = `${e.emoji} ${e.name}`;
 	$("#detail-desc").textContent = e.desc || "";
 	$("#detail-desc").hidden = !e.desc;
@@ -713,8 +899,32 @@ function openDetail(name) {
 			lin.appendChild(li);
 		});
 	}
+	renderDetailImage();
 	$("#modal-detail").hidden = false;
 }
+
+/* İstek üzerine element görseli üret (kendi Gemini anahtarıyla), cihazda sakla. */
+$("#btn-gen-image").addEventListener("click", async () => {
+	if (!detailName) return;
+	const e = getElement(detailName);
+	if (!e) return;
+	if (!Store.settings.geminiKey) { toast(t("genImageNeedsKey"), "error", 4500); return; }
+	const btn = $("#btn-gen-image");
+	btn.disabled = true;
+	btn.textContent = t("genImageWait");
+	try {
+		const dataUrl = await generateElementImage(e);
+		const imgs = Store.images;
+		imgs[norm(detailName)] = dataUrl;
+		Store.images = imgs;
+		renderDetailImage();
+	} catch (err) {
+		toast(err.message === "NO_KEY" ? t("genImageNeedsKey") : t("genImageFail"), "error", 4500);
+		renderDetailImage();
+	} finally {
+		btn.disabled = false;
+	}
+});
 
 $("#book-list").addEventListener("click", (ev) => {
 	const li = ev.target.closest("li[data-name]");
@@ -821,6 +1031,7 @@ function openSettings(hint = "") {
 		? "🌐 Küresel havuz bağlı — tüm oyuncuların keşifleri ortak bellekte birikiyor; sizin bir şey yapmanız gerekmiyor."
 		: "Havuz henüz kurulmadı. Site sahibi kurduğunda otomatik bağlanacaksınız — oyuncuların bir şey yapması gerekmez.";
 	$("#sound-toggle").checked = s.sound !== false;
+	$("#lang-select").value = currentLang();
 	const mem = Store.memory;
 	const learned = Object.keys(Store.recipes).length;
 	const community = Object.keys(COMMUNITY_RECIPES).length;
@@ -838,6 +1049,15 @@ $("#sound-toggle").addEventListener("change", () => {
 	if ($("#sound-toggle").checked) sfx("discover");
 });
 
+/* Dil değişimi: kaydet, statik metinleri yeniden uygula, görünür alanları çiz. */
+$("#lang-select").addEventListener("change", () => {
+	Store.settings = { ...Store.settings, lang: $("#lang-select").value };
+	applyStaticI18n();
+	renderSlots();
+	renderQuest();
+	renderChips();
+});
+
 $("#btn-settings").addEventListener("click", () => openSettings());
 $("#ai-provider").addEventListener("change", syncProviderRows);
 
@@ -853,7 +1073,7 @@ $("#btn-save-key").addEventListener("click", () => {
 		poolUrl: newPool,
 	};
 	updateKeyStatus();
-	toast("Ayarlar kaydedildi ✓");
+	toast(t("settingsSaved"));
 	// Havuz adresi değiştiyse hemen indir ve hedef adaylarını tazele.
 	if (newPool && newPool !== oldPool) {
 		loadCommunityRecipes().then(() => {
@@ -932,6 +1152,7 @@ $$(".modal").forEach((m) => {
 /* ---------- Başlangıç ---------- */
 
 async function init() {
+	applyStaticI18n();
 	seedBaseElements();
 
 	// Paylaşılan topluluk tariflerini (ve varsa küresel havuzu) indir;

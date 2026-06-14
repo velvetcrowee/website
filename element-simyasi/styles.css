@@ -358,6 +358,56 @@ input:focus, select:focus { outline: 2px solid var(--accent-dark); }
 .lb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-count { color: var(--gold); font-weight: 600; white-space: nowrap; }
 
+.lb-champ { color: var(--accent); font-weight: 600; white-space: nowrap; cursor: pointer; }
+.lb-name[data-profile] { cursor: pointer; }
+.lb-name[data-profile]:hover, .lb-champ:hover { text-decoration: underline; }
+
+/* ---------- Kategori şampiyonları satırı ---------- */
+#cat-leaderboard .lb-name { flex: 0 0 auto; max-width: 45%; }
+#cat-leaderboard .lb-champ { flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Son keşifler akışı ---------- */
+.feed-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.feed-list li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px 8px;
+	border-radius: 8px;
+	font-size: 0.88rem;
+}
+.feed-list li:nth-child(odd) { background: var(--card-2); }
+.feed-list li.feed-me { outline: 1px solid var(--accent); }
+.feed-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-text b[data-profile] { color: var(--accent); cursor: pointer; }
+.feed-text b[data-profile]:hover { text-decoration: underline; }
+.feed-when { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+
+/* ---------- Koleksiyonlar ---------- */
+#collection-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+	gap: 8px;
+	margin-bottom: 12px;
+}
+.coll-card { background: var(--card-2); border-radius: 10px; padding: 10px; font-size: 0.82rem; }
+.coll-card.coll-done { outline: 1px solid var(--gold); }
+.coll-head { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 6px; font-weight: 600; }
+.coll-count { color: var(--gold); white-space: nowrap; }
+.coll-bar { height: 6px; background: #0f172a; border-radius: 99px; overflow: hidden; margin-bottom: 6px; }
+.coll-fill { height: 100%; background: linear-gradient(90deg, var(--accent-dark), var(--accent)); border-radius: 99px; transition: width 0.4s ease; }
+.coll-sub { color: var(--muted); font-size: 0.72rem; }
+
+/* ---------- Profil ---------- */
+.prof-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.prof-cat {
+	background: var(--card-2);
+	border: 1px solid #334155;
+	border-radius: 999px;
+	padding: 4px 10px;
+	font-size: 0.78rem;
+}
+
 #badge-grid {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -393,6 +443,15 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 
 #book-list li, #detail-lineage li { cursor: pointer; }
 #detail-title { font-size: 1.4rem; }
+
+/* Üretilen element görseli */
+#detail-image-box { margin-bottom: 10px; text-align: center; }
+.element-img {
+	max-width: 220px;
+	width: 60%;
+	border-radius: var(--radius);
+	border: 1px solid #334155;
+}
 
 .item-list { list-style: none; }
 .item-list li {
