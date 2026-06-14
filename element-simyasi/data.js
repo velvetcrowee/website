@@ -1,19 +1,43 @@
-/* Veri katmanı — tüm kayıtlar cihazda localStorage içinde tutulur. */
+/* Veri katmanı — tüm kayıtlar cihazda localStorage içinde tutulur.
+
+   Performans: ayrıştırılmış (parse edilmiş) değerler bellekte önbelleğe alınır.
+   Önceden her okuma JSON.parse çalıştırıyordu; arayüz aynı anahtarı (elements,
+   recipes, settings…) tek render'da defalarca okuduğu için bu pahalıydı. Artık
+   parse yalnızca bir kez yapılır; yazma hem önbelleği hem localStorage'ı tazeler.
+   Tüm yazımlar Store ayarlayıcılarından (setter) geçtiği için önbellek tutarlı
+   kalır. */
+
+const _cache = new Map();
+
+/* Elementler her değiştiğinde artar; türetilmiş veriler (sıralı liste, kategori
+   sayımları) bu sürümle önbelleğe alınıp yalnızca değişince yeniden hesaplanır. */
+let elementsVersion = 0;
 
 const DB = {
 	read(key, fallback) {
+		if (_cache.has(key)) return _cache.get(key);
+		let val = fallback;
 		try {
 			const raw = localStorage.getItem("simya." + key);
-			return raw ? JSON.parse(raw) : fallback;
+			if (raw != null) val = JSON.parse(raw);
 		} catch {
-			return fallback;
+			val = fallback;
 		}
+		_cache.set(key, val);
+		return val;
 	},
 	write(key, value) {
-		localStorage.setItem("simya." + key, JSON.stringify(value));
+		_cache.set(key, value);
+		try {
+			localStorage.setItem("simya." + key, JSON.stringify(value));
+		} catch { /* kota dolu/erişilemez — bellekteki değer yine de günceldir */ }
 	},
 	remove(key) {
+		_cache.delete(key);
 		localStorage.removeItem("simya." + key);
+	},
+	clearCache() {
+		_cache.clear();
 	},
 };
 
@@ -25,7 +49,7 @@ const Store = {
 
 	// Keşfedilen elementler: { "buhar": { name, emoji, desc, discoveredAt, firstDiscovery, fromPair } }
 	get elements() { return DB.read("elements", {}); },
-	set elements(v) { DB.write("elements", v); },
+	set elements(v) { DB.write("elements", v); elementsVersion++; },
 
 	// Yapay zekâ tarif önbelleği: { "ateş++su": { name, emoji, isNew, desc } }
 	get recipes() { return DB.read("recipes", {}); },
@@ -60,16 +84,39 @@ const Store = {
 		Object.keys(localStorage)
 			.filter((k) => k.startsWith("simya."))
 			.forEach((k) => localStorage.removeItem(k));
+		DB.clearCache();
 	},
 
 	exportAll() {
 		const dump = {};
+		// Bellekteki (önbellek) değer önceliklidir: bir yazma kota nedeniyle
+		// localStorage'a geçememiş olsa bile dışa aktarma ekrandakiyle tutarlı olur.
 		Object.keys(localStorage)
 			.filter((k) => k.startsWith("simya."))
-			.forEach((k) => { dump[k] = JSON.parse(localStorage.getItem(k)); });
+			.forEach((k) => {
+				const short = k.slice(6); // "simya." sonrası
+				dump[k] = _cache.has(short) ? _cache.get(short) : JSON.parse(localStorage.getItem(k));
+			});
+		for (const [short, val] of _cache) {
+			const full = "simya." + short;
+			if (!(full in dump)) dump[full] = val;
+		}
 		return dump;
 	},
 };
+
+/* Çoklu sekme tutarlılığı: başka bir sekme localStorage'ı değiştirince ilgili
+   önbellek anahtarını düşürürüz; böylece bu sekme bir sonraki okumada güncel
+   değeri alır ve sekmeler birbirinin ilerlemesini ezmez. 'storage' olayı
+   yalnızca DİĞER sekmelerde tetiklenir (yazan sekmede değil). */
+if (typeof window !== "undefined" && window.addEventListener) {
+	window.addEventListener("storage", (e) => {
+		if (!e.key || e.key.indexOf("simya.") !== 0) return;
+		const short = e.key.slice(6);
+		_cache.delete(short);
+		if (short === "elements") elementsVersion++;
+	});
+}
 
 /* Türkçe-güvenli normalizasyon (İ/i, I/ı). Element ve tarif anahtarları
    her zaman bu biçimde tutulur. */

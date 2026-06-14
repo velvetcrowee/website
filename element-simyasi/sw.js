@@ -3,7 +3,7 @@
    görünür), ağ yoksa önbellekteki kopya sunulur. API istekleri her zaman ağa
    gider. */
 
-const CACHE = "simya-v23";
+const CACHE = "simya-v24";
 const ASSETS = [
 	"./",
 	"./index.html",
@@ -36,17 +36,35 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
 	const url = new URL(e.request.url);
-	// API istekleri ve diğer origin'ler her zaman ağa gider.
+	// API istekleri ve diğer origin'ler (havuz Worker'ı vb.) her zaman ağa gider.
 	if (url.origin !== location.origin) return;
 	if (e.request.method !== "GET") return;
-	// Önce ağ: güncel kopyayı getir ve önbelleği tazele; ağ yoksa önbelleğe düş.
+
+	// recipes.json: tazelik önemli (topluluk tarifleri) → önce ağ, yoksa önbellek.
+	if (url.pathname.endsWith("/recipes.json")) {
+		e.respondWith(
+			fetch(e.request)
+				.then((res) => {
+					const copy = res.clone();
+					caches.open(CACHE).then((c) => c.put(e.request, copy));
+					return res;
+				})
+				.catch(() => caches.match(e.request))
+		);
+		return;
+	}
+
+	// Uygulama kabuğu (HTML/JS/CSS/ikon/manifest): önce önbellek (cache-first).
+	// Önbellek, install sırasında addAll ile ATOMİK doldurulur; bu yüzden bir
+	// açılışta servis edilen tüm dosyalar DAİMA aynı sürümdendir — sürümlü
+	// betikler (data.js → … → app.js) arasında karışma olmaz. Açılış anında olur
+	// (ağ beklenmez). Yeni sürüm CACHE adı değişince (install → addAll → activate,
+	// skipWaiting) bir sonraki açılışta bütün olarak devreye girer.
 	e.respondWith(
-		fetch(e.request)
-			.then((res) => {
-				const copy = res.clone();
-				caches.open(CACHE).then((c) => c.put(e.request, copy));
-				return res;
-			})
-			.catch(() => caches.match(e.request).then((cached) => cached || Promise.reject()))
+		caches.match(e.request).then((cached) => cached || fetch(e.request).then((res) => {
+			const copy = res.clone();
+			caches.open(CACHE).then((c) => c.put(e.request, copy));
+			return res;
+		}))
 	);
 });

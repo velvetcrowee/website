@@ -142,11 +142,8 @@ function renderCount() {
 let activeCat = "";
 
 function renderCatFilter() {
-	const counts = {};
-	elementList().forEach((e) => {
-		const c = elementCategory(e);
-		counts[c] = (counts[c] || 0) + 1;
-	});
+	const counts = categoryCounts();
+	const total = Object.keys(Store.elements).length;
 	const bar = $("#cat-filter");
 	bar.innerHTML = "";
 	const mk = (id, label) => {
@@ -156,7 +153,7 @@ function renderCatFilter() {
 		b.textContent = label;
 		bar.appendChild(b);
 	};
-	mk("", `Tümü ${Object.keys(Store.elements).length}`);
+	mk("", `${t("all")} ${total}`);
 	CATEGORIES.forEach((c) => {
 		if (counts[c.id]) mk(c.id, `${c.emoji} ${c.name} ${counts[c.id]}`);
 	});
@@ -169,26 +166,64 @@ $("#cat-filter").addEventListener("click", (ev) => {
 	renderChips();
 });
 
+/* Anahtarlı (keyed) artımlı render: tüm listeyi sıfırdan kurmak yerine var olan
+   chip düğümlerini yeniden kullanır, yalnızca değişenleri günceller ve sırayı
+   yerinde düzeltir. Favori sabitleme, birleştirme ve havuz tazelemesi gibi sık
+   olaylarda 300+ düğümü her seferinde söküp yeniden kurmayı önler. */
+const chipNodes = new Map(); // norm(ad) → buton düğümü
+
+function createChip(e) {
+	const chip = document.createElement("button");
+	chip.className = "chip";
+	const emo = document.createElement("span");
+	const nm = document.createElement("span");
+	const star = document.createElement("span");
+	star.className = "chip-star";
+	chip.append(emo, nm, star);
+	updateChip(chip, e);
+	return chip;
+}
+
+function updateChip(chip, e) {
+	const fav = isFavorite(e.name);
+	const cls = "chip" + (freshNames.has(norm(e.name)) ? " fresh" : "") + (fav ? " pinned" : "");
+	if (chip.className !== cls) chip.className = cls;
+	if (chip.dataset.name !== e.name) chip.dataset.name = e.name;
+	// textContent kullanılır: ayrıca kaçış (escape) gerekmez, parse maliyeti yok.
+	if (chip.children[0].textContent !== e.emoji) chip.children[0].textContent = e.emoji;
+	if (chip.children[1].textContent !== e.name) chip.children[1].textContent = e.name;
+	const star = chip.children[2];
+	const starCh = fav ? "⭐" : "☆";
+	if (star.textContent !== starCh) star.textContent = starCh;
+	star.title = fav ? t("unpin") : t("pin");
+}
+
 function renderChips() {
 	const q = norm($("#search").value || "");
-	// Tek seferde DOM'a ekle (fragment) — çok elementte takılmayı azaltır.
-	const frag = document.createDocumentFragment();
-	elementList()
+	const list = elementList()
 		.filter((e) => !q || norm(e.name).includes(q))
 		.filter((e) => !activeCat || elementCategory(e) === activeCat)
-		// Favoriler her zaman en üstte (sabitlenmiş) görünür.
-		.sort((a, b) => (isFavorite(b.name) ? 1 : 0) - (isFavorite(a.name) ? 1 : 0))
-		.forEach((e) => {
-			const fav = isFavorite(e.name);
-			const chip = document.createElement("button");
-			chip.className = "chip" + (freshNames.has(norm(e.name)) ? " fresh" : "") + (fav ? " pinned" : "");
-			chip.dataset.name = e.name;
-			chip.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}</span>`
-				+ `<span class="chip-star" title="${fav ? t("unpin") : t("pin")}">${fav ? "⭐" : "☆"}</span>`;
-			frag.appendChild(chip);
-		});
-	chipListEl.innerHTML = "";
-	chipListEl.appendChild(frag);
+		// Favoriler her zaman en üstte (sabitlenmiş) görünür. sort kararlıdır:
+		// grup içinde keşif sırası (yenilik) korunur.
+		.sort((a, b) => (isFavorite(b.name) ? 1 : 0) - (isFavorite(a.name) ? 1 : 0));
+
+	const seen = new Set();
+	let prev = null;
+	for (const e of list) {
+		const key = norm(e.name);
+		seen.add(key);
+		let node = chipNodes.get(key);
+		if (!node) { node = createChip(e); chipNodes.set(key, node); }
+		else updateChip(node, e);
+		// Düğümü prev'den hemen sonraya getir (zaten oradaysa dokunma).
+		const ref = prev ? prev.nextSibling : chipListEl.firstChild;
+		if (ref !== node) chipListEl.insertBefore(node, ref);
+		prev = node;
+	}
+	// Artık listede olmayan (arama/filtre dışı kalan) düğümleri kaldır.
+	for (const [key, node] of chipNodes) {
+		if (!seen.has(key)) { node.remove(); chipNodes.delete(key); }
+	}
 	renderCount();
 	renderCatFilter();
 }
@@ -347,10 +382,24 @@ document.addEventListener("pointerdown", (ev) => {
 	}
 });
 
+/* pointermove saniyede onlarca kez tetiklenir; konum güncellemesini
+   requestAnimationFrame ile kareye bir kez sıkıştırırız (layout thrash azalır,
+   sürükleme akıcılaşır). Son olay saklanır, kare geldiğinde işlenir. */
+let _moveEv = null, _moveRaf = 0;
+
 document.addEventListener("pointermove", (ev) => {
 	if (!drag.active) return;
 	if (Math.abs(ev.clientX - drag.startX) + Math.abs(ev.clientY - drag.startY) > 6) drag.moved = true;
 	if (!drag.moved) return;
+	// PointerEvent'ten yalnızca konumu sakla (olay nesnesi sonra geçersiz olabilir).
+	_moveEv = { clientX: ev.clientX, clientY: ev.clientY };
+	if (!_moveRaf) _moveRaf = requestAnimationFrame(processMove);
+}, { passive: true });
+
+function processMove() {
+	_moveRaf = 0;
+	const ev = _moveEv;
+	if (!ev || !drag.active || !drag.moved) return;
 
 	if (drag.type === "chip") {
 		if (!drag.ghost) {
@@ -358,8 +407,8 @@ document.addEventListener("pointermove", (ev) => {
 			drag.ghost.classList.add("drag-ghost");
 			document.body.appendChild(drag.ghost);
 		}
-		drag.ghost.style.left = ev.clientX - 30 + "px";
-		drag.ghost.style.top = ev.clientY - 18 + "px";
+		// transform: GPU katmanı, left/top'tan daha akıcı.
+		drag.ghost.style.transform = `translate3d(${ev.clientX - 30}px, ${ev.clientY - 18}px, 0)`;
 	} else {
 		const node = wsItemEl(drag.id);
 		if (!node) return;
@@ -373,12 +422,26 @@ document.addEventListener("pointermove", (ev) => {
 		if (target?.classList.contains("ws-item")) target.classList.add("merge-target");
 		panelEl.classList.toggle("trash-hint", !!target?.closest?.("#panel") || isOverPanel(ev));
 	}
-});
+}
+
+function cancelPendingMove() {
+	if (_moveRaf) { cancelAnimationFrame(_moveRaf); _moveRaf = 0; }
+	_moveEv = null;
+}
+
+/* Bırakmadan (pointerup) hemen önce bekleyen son kareyi uygula: aksi halde
+   rAF iptal edilince öğe son hareketin bir kare gerisinde kalır ve o eski konum
+   kaydedilirdi. drag.active hâlâ true iken çağrılmalı. */
+function flushPendingMove() {
+	if (_moveRaf) { cancelAnimationFrame(_moveRaf); _moveRaf = 0; processMove(); }
+}
 
 document.addEventListener("pointerup", (ev) => {
 	if (!drag.active) return;
+	flushPendingMove();
 	const d = { ...drag };
 	drag.active = false;
+	cancelPendingMove();
 	panelEl.classList.remove("trash-hint");
 
 	if (d.type === "chip") {
@@ -438,6 +501,7 @@ document.addEventListener("pointerup", (ev) => {
 document.addEventListener("pointercancel", () => {
 	if (!drag.active) return;
 	drag.active = false;
+	cancelPendingMove();
 	drag.ghost?.remove();
 	if (drag.type === "ws") wsItemEl(drag.id)?.classList.remove("dragging");
 	$$(".ws-item.merge-target").forEach((n) => n.classList.remove("merge-target"));
@@ -647,25 +711,47 @@ $("#btn-book").addEventListener("click", () => {
 	// Modal hemen açılsın; ağır liste ve liderlik sonraki kareye ertelenir.
 	$("#modal-book").hidden = false;
 	requestAnimationFrame(() => {
-		const list = $("#book-list");
-		const frag = document.createDocumentFragment();
-		elementList().forEach((e) => {
-			const li = document.createElement("li");
-			li.dataset.name = e.name;
-			const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
-			const from = e.fromPair ? `${e.fromPair[0]} + ${e.fromPair[1]}` : "başlangıç";
-			const first = e.firstBy ? ` <span class="first-tag">🥇 ${escapeHtml(e.firstBy)}</span>` : "";
-			li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}${first}</span>
-				<span class="sub">${escapeHtml(from)} — ${date}</span>`;
-			frag.appendChild(li);
-		});
-		list.innerHTML = "";
-		list.appendChild(frag);
+		renderBookReset();
 		renderLeaderboard();
 		renderCatLeaderboard();
 		renderActivityFeed();
 	});
 });
+
+/* Keşif listesi sayfalı yüklenir: çok büyük koleksiyonlarda binlerce DOM düğümü
+   tek seferde basmaz; "Daha fazla göster" ile parça parça eklenir. */
+const BOOK_PAGE = 80;
+let _bookItems = [], _bookShown = 0;
+
+function renderBookReset() {
+	_bookItems = elementList();
+	_bookShown = 0;
+	$("#book-list").innerHTML = "";
+	renderBookMore();
+}
+
+function renderBookMore() {
+	const en = currentLang() === "en";
+	const loc = en ? "en-US" : "tr-TR";
+	const frag = document.createDocumentFragment();
+	const end = Math.min(_bookShown + BOOK_PAGE, _bookItems.length);
+	for (let i = _bookShown; i < end; i++) {
+		const e = _bookItems[i];
+		const li = document.createElement("li");
+		li.dataset.name = e.name;
+		const date = new Date(e.discoveredAt).toLocaleDateString(loc, { day: "numeric", month: "long" });
+		const from = e.fromPair ? `${e.fromPair[0]} + ${e.fromPair[1]}` : t("startEl2");
+		const first = e.firstBy ? ` <span class="first-tag">🥇 ${escapeHtml(e.firstBy)}</span>` : "";
+		li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}${first}</span>
+			<span class="sub">${escapeHtml(from)} — ${date}</span>`;
+		frag.appendChild(li);
+	}
+	$("#book-list").appendChild(frag);
+	_bookShown = end;
+	$("#btn-book-more").hidden = _bookShown >= _bookItems.length;
+}
+
+$("#btn-book-more").addEventListener("click", renderBookMore);
 
 /* Koleksiyon ilerlemesi: her set için bulunan/toplam ve eksik üyeler. */
 function renderCollections() {
@@ -915,6 +1001,11 @@ $("#btn-gen-image").addEventListener("click", async () => {
 	try {
 		const dataUrl = await generateElementImage(e);
 		const imgs = Store.images;
+		// Görseller büyüktür (base64); localStorage kotasını korumak için en
+		// fazla son 24 görseli sakla (en eskiyi düşür). Aksi halde kota dolunca
+		// oyun ilerlemesi yazımları da sessizce başarısız olabilirdi.
+		const keys = Object.keys(imgs);
+		if (keys.length >= 24 && !imgs[norm(detailName)]) delete imgs[keys[0]];
 		imgs[norm(detailName)] = dataUrl;
 		Store.images = imgs;
 		renderDetailImage();

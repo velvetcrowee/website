@@ -61,6 +61,8 @@ const STRINGS = {
 		hintReveal: "💡 İpucu",
 		goal: "Hedef",
 		settingsSaved: "Ayarlar kaydedildi ✓",
+		showMore: "Daha fazla göster",
+		startEl2: "başlangıç",
 		// Ayarlar
 		settingsTitle: "⚙️ Ayarlar",
 		profileMembership: "Profil & Üyelik",
@@ -126,6 +128,8 @@ const STRINGS = {
 		hintReveal: "💡 Hint",
 		goal: "Goal",
 		settingsSaved: "Settings saved ✓",
+		showMore: "Show more",
+		startEl2: "start",
 		settingsTitle: "⚙️ Settings",
 		profileMembership: "Profile & Account",
 		aiHeading: "Artificial Intelligence",

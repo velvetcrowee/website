@@ -39,8 +39,9 @@ body {
 	align-items: center;
 	gap: 12px;
 	padding: 10px 16px;
-	background: rgba(15, 23, 42, 0.92);
-	backdrop-filter: blur(6px);
+	/* Düz, opak arka plan: backdrop-filter blur düşük donanımlı telefonlarda her
+	   karede pahalı repaint yapıyordu; başlık zaten içeriğin üstünde sabit. */
+	background: var(--bg);
 	border-bottom: 1px solid #1e293b;
 	z-index: 10;
 }
@@ -222,12 +223,16 @@ body {
 .ws-item.pop { animation: pop 0.35s cubic-bezier(0.2, 1.6, 0.4, 1); }
 @keyframes pop { from { transform: scale(0.2); } to { transform: scale(1); } }
 
-/* Sürükleme hayaleti */
+/* Sürükleme hayaleti — transform ile konumlandırılır (GPU katmanı). Taban
+   nokta viewport köşesi olsun diye top/left 0; hareket translate3d ile verilir. */
 .drag-ghost {
 	position: fixed;
+	top: 0;
+	left: 0;
 	z-index: 100;
 	pointer-events: none;
 	opacity: 0.9;
+	will-change: transform;
 }
 
 /* Panel silme vurgusu: tuval öğesi panel üstüne sürüklenince */
@@ -461,6 +466,11 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 	padding: 9px 4px;
 	border-bottom: 1px solid #273548;
 	font-size: 0.9rem;
+	/* Uzun listelerde ekran dışı satırların layout/paint'ini tarayıcı atlar.
+	   'auto 42px': tarayıcı bir kez ölçtükten sonra gerçek satır yüksekliğini
+	   hatırlar, böylece sarılan (uzun) satırlarda kaydırma sıçraması olmaz. */
+	content-visibility: auto;
+	contain-intrinsic-size: auto 42px;
 }
 .item-list li .sub { color: var(--muted); font-size: 0.78rem; flex: 1; text-align: right; }
 
