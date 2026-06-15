@@ -1,0 +1,41 @@
+name: Deploy Worker
+
+# Cloudflare Worker'ı (cloudflare-worker/) otomatik yayınlar: cloudflare-worker/**
+# her değiştiğinde `wrangler deploy` çalışır — artık elle kopyala-yapıştır yok.
+#
+# Gerekli GitHub gizli değişkenleri (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN  → Workers Scripts:Edit + Workers KV:Edit + D1:Edit yetkili token
+#   CLOUDFLARE_ACCOUNT_ID → Cloudflare panel sağ kenarındaki Account ID
+# Bağlama ID'leri (KV/D1) cloudflare-worker/wrangler.toml içindedir.
+# Not: GEMINI_KEY/DEEPSEEK_KEY gibi Worker secret'ları wrangler deploy'dan etkilenmez.
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "cloudflare-worker/**"
+      - ".github/workflows/deploy-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare-worker
+          command: deploy
