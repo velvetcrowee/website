@@ -1419,7 +1419,7 @@ vsplitEl.addEventListener("pointercancel", endSplitDrag);
 document.addEventListener("visibilitychange", () => {
 	if (document.visibilityState === "hidden") flushSave();
 });
-window.addEventListener("pagehide", flushSave);
+window.addEventListener("pagehide", () => flushSave(true));
 
 /* ---------- Başlangıç ---------- */
 

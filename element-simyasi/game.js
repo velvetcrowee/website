@@ -163,21 +163,24 @@ function mergeSaveIntoLocal(save) {
 }
 
 /* İlerlemeyi buluta yazar (giriş yapıldıysa). Sunucu mevcut kayıtla birleştirir.
-   Dönüş: { ok, error, elements } — başarı durumunu çağıran görebilsin. */
-async function saveProgressNow() {
+   Dönüş: { ok, error, elements } — başarı durumunu çağıran görebilsin.
+   keepalive: yalnızca sayfa kapanırken (pagehide) anlamlıdır AMA tarayıcılar
+   keepalive isteklerini ~64KB ile sınırlar; oyun büyüyünce kayıt gövdesi bunu
+   aşar ve istek "Bağlantı kurulamadı" ile düşer. Bu yüzden keepalive varsayılan
+   KAPALI ve yalnızca gövde sınırın altındaysa açılır (büyük kayıt normal fetch
+   ile boyut sınırı olmadan gider). */
+async function saveProgressNow(keepalive = false) {
 	const poolUrl = activePoolUrl();
 	if (!poolUrl || !isLoggedIn()) return { ok: false, error: "Giriş yok" };
 	try {
-		const res = await fetch(poolUrl + "/save", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			// keepalive: sekme kapanırken/gizlenirken yapılan çıkış kaydı da tamamlanır.
-			keepalive: true,
-			body: JSON.stringify({
-				token: getToken(),
-				data: { elements: Store.elements, recipes: Store.recipes, stats: Store.stats, badges: Store.badges },
-			}),
+		const body = JSON.stringify({
+			token: getToken(),
+			data: { elements: Store.elements, recipes: Store.recipes, stats: Store.stats, badges: Store.badges },
 		});
+		const opts = { method: "POST", headers: { "content-type": "application/json" }, body };
+		// keepalive yalnızca kapanış anında VE gövde 64KB sınırının altındaysa.
+		if (keepalive && body.length < 60000) opts.keepalive = true;
+		const res = await fetch(poolUrl + "/save", opts);
 		if (!res.ok) {
 			let msg = `Sunucu hatası (${res.status})`;
 			if (res.status === 404) msg = "Sunucu güncel değil (bulut kayıt yok). Worker'ı güncelleyin.";
@@ -207,14 +210,15 @@ function scheduleSave() {
 	}
 }
 
-/* Bekleyen kaydı hemen gönderir (kısıtlamayı atlar) — çıkışta veya zaman dolunca. */
-function flushSave() {
+/* Bekleyen kaydı hemen gönderir (kısıtlamayı atlar) — çıkışta veya zaman dolunca.
+   unloading=true yalnızca pagehide'da verilir (keepalive denemesi için). */
+function flushSave(unloading = false) {
 	clearTimeout(_saveTimer);
 	_saveTimer = null;
 	if (!_savePending || !isLoggedIn() || !activePoolUrl()) return;
 	_savePending = false;
 	_lastSaveAt = Date.now();
-	saveProgressNow();
+	saveProgressNow(unloading === true);
 }
 
 /* Buluttan ilerlemeyi yükleyip yerele katar.
