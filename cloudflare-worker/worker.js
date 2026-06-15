@@ -13,6 +13,7 @@
  *   GET  /pack        → havuz (hafif, desc YOK) { "ateş++su": {name,emoji,isNew,cat,by,at}, ... }
  *                       ?since=<rid> → yalnızca delta; X-Pool-Cursor başlığı imleci taşır
  *   GET  /recipe?key= → tek tarifin tam kaydı (desc dahil; detay açılışında tembel çekilir)
+ *   GET  /image?name= → element görseli (Pollinations'ı sunucuda çağırır + cache)
  *   GET  /leaderboard → en çok "dünya ilki" keşfe sahip oyuncular
  *   GET  /stats       → dünya panosu (kategori dağılımı, büyüme, en yaratıcı, en yeni)
  *   POST /recipe      → { key, result } yeni tarif ekler (var olanı ezmez)
@@ -238,6 +239,23 @@ function pairKey(a, b) {
 	return [norm(a), norm(b)].sort((x, y) => x.localeCompare(y, "tr")).join("++");
 }
 
+/* ---------- Element görseli (Pollinations proxy) ----------
+   Görseli istemci yerine SUNUCU çağırır: kullanıcının ağı Pollinations'a
+   erişemese bile (bölgesel engel/DNS) Cloudflare erişir. Sonuç Cache API'de
+   saklanır → tekrar isteklerde anında ve Pollinations'a tek kez gidilir.
+   Element adından deterministik seed → aynı element herkeste aynı görsel.
+   (İleride R2'ye geçiş: burada üretip R2'ye de yazmak yeterli.) */
+function imgHash(s) {
+	let h = 5381;
+	for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+	return h >>> 0;
+}
+function pollinationsUrl(name) {
+	const seed = imgHash(norm(name));
+	const prompt = encodeURIComponent(`${name}, renkli parlak oyun ikonu, sticker tarzı, sade düz arka plan, yazısız dijital illüstrasyon`);
+	return `https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&seed=${seed}&nologo=true&model=flux`;
+}
+
 /* ---------- Üyelik (benzersiz kullanıcı adı) ---------- */
 
 async function sha256(s) {
@@ -420,6 +438,32 @@ export default {
 			if (!key) return json({ error: "key gerekli" }, 400);
 			const row = await env.DB.prepare(`SELECT ${RECIPE_COLS} FROM recipes WHERE key = ?`).bind(key).first();
 			return row ? json(rowToRecipe(row)) : json({}, 404);
+		}
+
+		/* Element görseli: Pollinations'ı sunucu tarafında çağırır + Cache API'de
+		   saklar. İstemci <img src="<havuz>/image?name=..."> ile kullanır. */
+		if (url.pathname === "/image" && req.method === "GET") {
+			const name = String(url.searchParams.get("name") || "").trim().slice(0, 60);
+			if (!name) return json({ error: "name gerekli" }, 400);
+			const cache = caches.default;
+			const cacheKey = new Request(url.toString());
+			const hit = await cache.match(cacheKey);
+			if (hit) return hit;
+			let up;
+			try {
+				const ctl = new AbortController();
+				const to = setTimeout(() => ctl.abort(), 28000);
+				up = await fetch(pollinationsUrl(name), { signal: ctl.signal, cf: { cacheEverything: true, cacheTtl: 86400 } });
+				clearTimeout(to);
+			} catch { return json({ error: "Görsel üretilemedi" }, 502); }
+			if (!up || !up.ok) return json({ error: "Görsel üretilemedi" }, 502);
+			const buf = await up.arrayBuffer();
+			const headers = new Headers(CORS);
+			headers.set("content-type", up.headers.get("content-type") || "image/jpeg");
+			headers.set("Cache-Control", "public, max-age=31536000, immutable");
+			const resp = new Response(buf, { status: 200, headers });
+			if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, resp.clone()));
+			return resp;
 		}
 
 		/* Liderlik tablosu: havuzdaki tüm tariflerde "ilk bulan"ları sayar,
