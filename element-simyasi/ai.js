@@ -393,6 +393,11 @@ function imagePromptText(name) {
 }
 
 function poolImageUrl(name) {
+	// Önce havuz Worker'ı üzerinden: görseli Cloudflare'in ağı çağırır (kullanıcının
+	// ağı Pollinations'a erişemese de çalışır) ve sunucuda önbelleğe alınır.
+	const base = (typeof activePoolUrl === "function") ? activePoolUrl() : "";
+	if (base) return base + "/image?name=" + encodeURIComponent(name);
+	// Havuz yoksa doğrudan Pollinations (yedek).
 	const seed = strHash(norm(name));
 	const prompt = encodeURIComponent(imagePromptText(name));
 	return `https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&seed=${seed}&nologo=true&model=flux`;
