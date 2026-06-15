@@ -404,6 +404,15 @@ input:focus, select:focus { outline: 2px solid var(--accent-dark); }
 .coll-fill { height: 100%; background: linear-gradient(90deg, var(--accent-dark), var(--accent)); border-radius: 99px; transition: width 0.4s ease; }
 .coll-sub { color: var(--muted); font-size: 0.72rem; }
 
+/* ---------- Dünya istatistik panosu (oranlı çubuklar) ---------- */
+.stat-h { margin: 12px 0 6px; font-size: 0.92rem; color: var(--text); }
+.stat-bars { display: flex; flex-direction: column; gap: 5px; margin-bottom: 4px; }
+.stat-bar-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; }
+.stat-bar-label { flex: 0 0 38%; max-width: 38%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.stat-bar { flex: 1; height: 8px; background: #0f172a; border-radius: 99px; overflow: hidden; }
+.stat-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-dark), var(--accent)); border-radius: 99px; transition: width 0.4s ease; }
+.stat-bar-val { flex: 0 0 auto; min-width: 28px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+
 /* ---------- Profil ---------- */
 .prof-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .prof-cat {

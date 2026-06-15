@@ -10,8 +10,11 @@
  *
  * Uçlar:
  *   GET  /            → durum { recipes, ai }
- *   GET  /pack        → tüm havuz { "ateş++su": {name,emoji,isNew,desc,cat,by,at}, ... }
+ *   GET  /pack        → havuz (hafif, desc YOK) { "ateş++su": {name,emoji,isNew,cat,by,at}, ... }
+ *                       ?since=<rid> → yalnızca delta; X-Pool-Cursor başlığı imleci taşır
+ *   GET  /recipe?key= → tek tarifin tam kaydı (desc dahil; detay açılışında tembel çekilir)
  *   GET  /leaderboard → en çok "dünya ilki" keşfe sahip oyuncular
+ *   GET  /stats       → dünya panosu (kategori dağılımı, büyüme, en yaratıcı, en yeni)
  *   POST /recipe      → { key, result } yeni tarif ekler (var olanı ezmez)
  *   POST /combine     → { a:{name,emoji}, b:{name,emoji} } → tarif (havuz → AI)
  *   POST /register, /login, /save, /load · GET /checkname → üyelik (KV)
@@ -34,6 +37,8 @@ const CORS = {
 	"access-control-allow-origin": "*",
 	"access-control-allow-methods": "GET, POST, OPTIONS",
 	"access-control-allow-headers": "content-type",
+	// /pack delta imlecini (X-Pool-Cursor) çapraz-köken JS'in okuyabilmesi için.
+	"access-control-expose-headers": "X-Pool-Cursor",
 };
 
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
@@ -44,6 +49,11 @@ const GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-
    bazı sütun adları SQL'e/eski şemaya uyacak biçimde farklıdır; istemciye
    dönerken eşlenir (descr→desc, finder→by, isnew→isNew). */
 const RECIPE_COLS = "key, name, emoji, isnew, descr, cat, finder, at";
+
+/* /pack için HAFİF sütunlar: ağır `descr` ALANI YOK (yükü ~%50-65 düşürür).
+   Açıklama yalnızca detay açılışında tembel olarak /recipe?key= ile iner.
+   rowid: silme olmadığı için monotonik artan kusursuz "delta" imleci. */
+const PACK_COLS = "rowid AS rid, key, name, emoji, isnew, cat, finder, at";
 
 /* Birleştirme şeması (Gemini responseSchema için). */
 const COMBINE_SCHEMA = {
@@ -65,6 +75,20 @@ function rowToRecipe(row) {
 		emoji: row.emoji || "✨",
 		isNew: !!row.isnew,
 		desc: row.descr || "",
+		cat: row.cat || "diger",
+	};
+	if (row.finder) out.by = row.finder;
+	if (row.at) out.at = row.at;
+	return out;
+}
+
+/* /pack için hafif eşleyici: desc YOK. İstemci açıklamayı detay açılışında
+   /recipe?key= ile ayrıca çeker. */
+function rowToLite(row) {
+	const out = {
+		name: row.name,
+		emoji: row.emoji || "✨",
+		isNew: !!row.isnew,
 		cat: row.cat || "diger",
 	};
 	if (row.finder) out.by = row.finder;
@@ -364,13 +388,38 @@ export default {
 
 		/* ---------- Tarif havuzu (D1) ---------- */
 
+		/* Havuz paketi (hafif: desc YOK). Delta için ?since=<rid>: yalnızca o
+		   imleçten SONRAKİ satırlar döner. Gövde DEĞİŞMEDEN düz {key: lite}
+		   haritasıdır (eski istemciler bozulmaz); en büyük rowid yanıt başlığında
+		   (X-Pool-Cursor) gelir — istemci bir sonraki çağrıda ?since olarak verir. */
 		if (url.pathname === "/pack" && req.method === "GET") {
+			if (!env.DB) return new Response("{}", { headers: { "content-type": "application/json", "X-Pool-Cursor": "0", ...CORS } });
+			await ensureMigrated(env);
+			const since = parseInt(url.searchParams.get("since") || "0", 10) || 0;
+			const stmt = since > 0
+				? env.DB.prepare(`SELECT ${PACK_COLS} FROM recipes WHERE rowid > ? ORDER BY rowid`).bind(since)
+				: env.DB.prepare(`SELECT ${PACK_COLS} FROM recipes ORDER BY rowid`);
+			const { results } = await stmt.all();
+			const pack = {};
+			let cursor = since;
+			for (const row of results || []) {
+				pack[row.key] = rowToLite(row);
+				if (row.rid > cursor) cursor = row.rid;
+			}
+			return new Response(JSON.stringify(pack), {
+				headers: { "content-type": "application/json", "X-Pool-Cursor": String(cursor), ...CORS },
+			});
+		}
+
+		/* Tek tarifin tam kaydı (desc dahil) — istemci açıklamayı detay açılışında
+		   tembel çeker (/pack artık desc taşımaz). */
+		if (url.pathname === "/recipe" && req.method === "GET") {
 			if (!env.DB) return json({});
 			await ensureMigrated(env);
-			const { results } = await env.DB.prepare(`SELECT ${RECIPE_COLS} FROM recipes`).all();
-			const pack = {};
-			for (const row of results || []) pack[row.key] = rowToRecipe(row);
-			return json(pack);
+			const key = String(url.searchParams.get("key") || "");
+			if (!key) return json({ error: "key gerekli" }, 400);
+			const row = await env.DB.prepare(`SELECT ${RECIPE_COLS} FROM recipes WHERE key = ?`).bind(key).first();
+			return row ? json(rowToRecipe(row)) : json({}, 404);
 		}
 
 		/* Liderlik tablosu: havuzdaki tüm tariflerde "ilk bulan"ları sayar,
@@ -396,6 +445,29 @@ export default {
 				totalRecipes: totals?.recipes || 0,
 				totalPlayers: totals?.players || 0,
 				you,
+			});
+		}
+
+		/* Dünya istatistik panosu: havuzun tek seferde sunucu tarafı toplaması.
+		   İstemcide tüm tarifleri taramak yerine D1 toplar (ölçeklenir). */
+		if (url.pathname === "/stats" && req.method === "GET") {
+			if (!env.DB) return json({ totalRecipes: 0, totalPlayers: 0, categories: [], growth: [], topCreative: [], latest: [] });
+			await ensureMigrated(env);
+			const res = await env.DB.batch([
+				env.DB.prepare("SELECT (SELECT COUNT(*) FROM recipes) AS recipes, (SELECT COUNT(DISTINCT finder) FROM recipes WHERE finder IS NOT NULL AND finder != '') AS players"),
+				env.DB.prepare("SELECT cat, COUNT(*) AS count FROM recipes GROUP BY cat ORDER BY count DESC"),
+				env.DB.prepare("SELECT substr(at,1,10) AS day, COUNT(*) AS count FROM recipes WHERE at IS NOT NULL AND at != '' GROUP BY day ORDER BY day DESC LIMIT 14"),
+				env.DB.prepare("SELECT finder AS name, SUM(isnew) AS creative, COUNT(*) AS total FROM recipes WHERE finder IS NOT NULL AND finder != '' GROUP BY finder HAVING creative > 0 ORDER BY creative DESC, total DESC LIMIT 10"),
+				env.DB.prepare("SELECT name, emoji, cat, finder AS by, at FROM recipes WHERE at IS NOT NULL AND at != '' ORDER BY at DESC LIMIT 12"),
+			]);
+			const totals = (res[0].results || [])[0] || {};
+			return json({
+				totalRecipes: totals.recipes || 0,
+				totalPlayers: totals.players || 0,
+				categories: res[1].results || [],
+				growth: res[2].results || [],
+				topCreative: res[3].results || [],
+				latest: res[4].results || [],
 			});
 		}
 

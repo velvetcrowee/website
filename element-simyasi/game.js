@@ -34,25 +34,59 @@ function activePoolUrl() {
 	return (Store.settings.poolUrl || DEFAULT_POOL_URL).replace(/\/+$/, "");
 }
 
+/* Küratörlü yerleşik paket (recipes.json) — bir kez indirilir, bellekte tutulur. */
+let CURATED_RECIPES = null;
+/* Küresel havuzun yerel kopyası — localStorage'da kalıcı; açılışta anında yüklenir
+   ve sunucudan yalnızca DELTA (yeni tarifler) çekilerek güncellenir. Böylece
+   havuz 5000+ olsa da her açılış/yenilemede tüm paket baştan inmez. */
+let POOL_RECIPES = null;
+let POOL_CURSOR = null;  // bu sekmenin işlediği son rowid; sekme-içi tutarlı kalır
+const POOL_CAP = 20000;  // güvenlik sınırı: ~1.8 MB; aşılırsa en eski girdiler düşer
+
+function capPool(pool) {
+	const keys = Object.keys(pool);
+	if (keys.length <= POOL_CAP) return pool;
+	const out = {};
+	for (const k of keys.slice(keys.length - POOL_CAP)) out[k] = pool[k];
+	return out;
+}
+
 async function loadCommunityRecipes() {
-	try {
-		const res = await fetch("recipes.json", { cache: "no-cache" });
-		if (res.ok) COMMUNITY_RECIPES = await res.json();
-	} catch { /* çevrimdışı veya bulunamadı — yerleşik tarifler yeter */ }
-	// Küresel havuz (Cloudflare Worker) varsa onu da kat: tüm oyuncuların
-	// AI keşifleri tek havuzda birikir, aynı ikili dünyada bir kez sorulur.
+	// 1) Küratörlü yerleşik tarifler (bir kez).
+	if (!CURATED_RECIPES) {
+		CURATED_RECIPES = {};
+		try {
+			const res = await fetch("recipes.json", { cache: "no-cache" });
+			if (res.ok) CURATED_RECIPES = await res.json();
+		} catch { /* çevrimdışı — yerleşik tarifler yeter */ }
+	}
+	// 2) Havuzun kalıcı kopyasını ve imleci bir kez yükle (anında açılış). İkisi de
+	//    sekme-içi bellekte tutulur ki delta her zaman bu sekmenin POOL'uyla uyumlu
+	//    ilerlesin (çok-sekme durumunda her sekme kendi tam kopyasını tamamlar).
+	if (!POOL_RECIPES) POOL_RECIPES = DB.read("poolCache", {}) || {};
+	if (POOL_CURSOR === null) POOL_CURSOR = DB.read("poolCursor", 0) || 0;
+
+	// 3) Sunucudan yalnızca delta çek: imleçten (rowid) sonraki yeni tarifler.
 	const poolUrl = activePoolUrl();
 	if (poolUrl) {
 		try {
-			// no-store: tarayıcı/CDN önbelleğe almasın, sayaçlar tazelensin.
-			const res = await fetch(poolUrl + "/pack?t=" + Date.now(), { cache: "no-store" });
+			// Farklı imleç → farklı URL olduğundan yanıt zaten tazedir (?t/no-store gerekmez).
+			const res = await fetch(poolUrl + "/pack" + (POOL_CURSOR ? "?since=" + POOL_CURSOR : ""));
 			if (res.ok) {
-				const pack = await res.json();
-				// Yerel küratörlü paket önceliklidir; havuz boşlukları doldurur.
-				COMMUNITY_RECIPES = { ...pack, ...COMMUNITY_RECIPES };
+				const delta = await res.json();
+				const newCursor = parseInt(res.headers.get("X-Pool-Cursor") || "0", 10) || 0;
+				if (Object.keys(delta).length) {
+					Object.assign(POOL_RECIPES, delta);
+					POOL_RECIPES = capPool(POOL_RECIPES);
+					try { DB.write("poolCache", POOL_RECIPES); } catch { /* kota — bellekte kalır */ }
+				}
+				if (newCursor > POOL_CURSOR) { POOL_CURSOR = newCursor; DB.write("poolCursor", newCursor); }
 			}
-		} catch { /* havuza ulaşılamadı — oyun yereliyle devam eder */ }
+		} catch { /* havuza ulaşılamadı — yerel kopyayla devam */ }
 	}
+
+	// Yerel küratörlü paket önceliklidir; havuz boşlukları doldurur.
+	COMMUNITY_RECIPES = { ...POOL_RECIPES, ...CURATED_RECIPES };
 	lastPoolChanged = reconcileElements();
 	return COMMUNITY_RECIPES;
 }
