@@ -755,6 +755,7 @@ $("#btn-book").addEventListener("click", () => {
 	$("#modal-book").hidden = false;
 	requestAnimationFrame(() => {
 		renderBookReset();
+		renderWorldStats();
 		renderLeaderboard();
 		renderCatLeaderboard();
 		renderActivityFeed();
@@ -932,6 +933,60 @@ function checkCollections() {
 	if (changed) DB.write("collectionsClaimed", claimed);
 }
 
+/* Dünya istatistik panosu: havuzun sunucu tarafı toplaması (/stats). Tüm
+   tarifleri istemcide taramak yerine D1 toplar — havuz büyüse de hızlı kalır. */
+async function renderWorldStats() {
+	const box = $("#world-stats");
+	const poolUrl = activePoolUrl();
+	if (!poolUrl) { box.innerHTML = `<p class='muted'>${t("statsNeedPool")}</p>`; return; }
+	box.innerHTML = `<p class='muted'>${t("loading")}</p>`;
+	const en = currentLang() === "en";
+	let s;
+	try {
+		const res = await fetch(poolUrl + "/stats?t=" + Date.now(), { cache: "no-store" });
+		s = await res.json();
+	} catch { box.innerHTML = `<p class='muted'>${t("statsFail")}</p>`; return; }
+
+	// Yatay oranlı çubuk üreticisi (en yüksek değer = %100).
+	const bars = (rows, label, value, max) => {
+		if (!rows.length) return "";
+		const top = Math.max(1, ...rows.map(value));
+		return `<div class="stat-bars">` + rows.map((r) => {
+			const pct = Math.round((value(r) / top) * 100);
+			return `<div class="stat-bar-row"><span class="stat-bar-label">${label(r)}</span>`
+				+ `<span class="stat-bar"><span class="stat-fill" style="width:${pct}%"></span></span>`
+				+ `<span class="stat-bar-val">${value(r)}</span></div>`;
+		}).join("") + `</div>`;
+	};
+
+	const cats = (s.categories || []).map((c) => {
+		const info = categoryInfo(c.cat);
+		return { ...c, lbl: `${info.emoji} ${escapeHtml(info.name)}` };
+	});
+	const growth = (s.growth || []).slice().reverse(); // eskiden yeniye
+	const creative = s.topCreative || [];
+	const latest = s.latest || [];
+
+	box.innerHTML = `
+		<div class="stats-row">
+			<div class="stat"><b>${s.totalRecipes || 0}</b><span>${t("statPoolRecipes")}</span></div>
+			<div class="stat"><b>${s.totalPlayers || 0}</b><span>${t("statPoolPlayers")}</span></div>
+		</div>
+		${cats.length ? `<h4 class="stat-h">${t("categorySpread")}</h4>` + bars(cats, (r) => r.lbl, (r) => r.count) : ""}
+		${growth.length ? `<h4 class="stat-h">${t("poolGrowth")}</h4>` + bars(growth, (r) => escapeHtml(r.day.slice(5)), (r) => r.count) : ""}
+		${creative.length ? `<h4 class="stat-h">${t("creativeLeaders")}</h4>`
+			+ `<ol class="lb-list">` + creative.map((u, i) => {
+				const rank = ["🥇", "🥈", "🥉"][i] || `${i + 1}.`;
+				return `<li><span class="lb-rank">${rank}</span><span class="lb-name" data-profile="${escapeHtml(u.name)}">${escapeHtml(u.name)}</span><span class="lb-count">${u.creative} ✨</span></li>`;
+			}).join("") + `</ol>` : ""}
+		${latest.length ? `<h4 class="stat-h">${t("latestFinds")}</h4>`
+			+ `<ul class="feed-list">` + latest.map((r) => `
+				<li><span>${r.emoji || "✨"}</span>
+				<span class="feed-text"><b data-profile="${escapeHtml(r.by || "")}">${escapeHtml(r.by || "?")}</b> ${en ? "discovered" : "keşfetti"} <b>${escapeHtml(r.name)}</b></span>
+				<span class="feed-when">${timeAgo(r.at, en)}</span></li>`).join("") + `</ul>` : ""}
+	`;
+}
+
 /* Liderlik tablosu: havuzdan en çok "dünya ilki" keşfe sahip oyuncular. */
 async function renderLeaderboard() {
 	const box = $("#leaderboard");
@@ -992,6 +1047,30 @@ function renderDetailImage() {
 	}
 }
 
+/* Açıklamayı havuzdan tembel çek: /pack artık desc taşımıyor (hafif), bu yüzden
+   yerelde açıklaması olmayan bir element detayı açılınca tek tarif için
+   /recipe?key= çağrılır, sonuç yerele yazılır (bir daha çekilmez). Yan fayda:
+   açıklaması hiç olmayan yerleşik (seed) elementler de havuzda varsa açıklama alır. */
+async function loadDescLazy(e) {
+	const poolUrl = activePoolUrl();
+	if (!poolUrl || !e.fromPair) return;
+	const key = pairKey(e.fromPair[0], e.fromPair[1]);
+	try {
+		const res = await fetch(poolUrl + "/recipe?key=" + encodeURIComponent(key));
+		if (!res.ok) return;
+		const r = await res.json();
+		if (!r || !r.desc) return;
+		const els = Store.elements;
+		const k = norm(e.name);
+		if (els[k] && !els[k].desc) { els[k].desc = r.desc; Store.elements = els; }
+		if (detailName === e.name) {
+			const descEl = $("#detail-desc");
+			descEl.textContent = r.desc;
+			descEl.hidden = false;
+		}
+	} catch { /* ağ yok — açıklama bir dahaki sefere gelir */ }
+}
+
 function openDetail(name) {
 	const e = getElement(name);
 	if (!e) return;
@@ -999,6 +1078,7 @@ function openDetail(name) {
 	$("#detail-title").textContent = `${e.emoji} ${e.name}`;
 	$("#detail-desc").textContent = e.desc || "";
 	$("#detail-desc").hidden = !e.desc;
+	if (!e.desc) loadDescLazy(e);
 	// Dünyada ilk keşfeden kişi + tarih (havuzdan).
 	const firstEl = $("#detail-first");
 	if (e.firstBy) {
