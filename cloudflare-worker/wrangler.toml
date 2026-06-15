@@ -16,3 +16,8 @@ id = "2d652408cc7e47adaf851d452ee05e35"
 binding = "DB"
 database_name = "simya-db"
 database_id = "96196c1d-5649-4a18-a327-c64b63811765"
+
+# Cloudflare Workers AI — element görsellerini sunucuda üretir (Flux).
+# Ayrı kaynak/oluşturma gerekmez; ücretsiz katmanda hazırdır (günde 10.000 neuron).
+[ai]
+binding = "AI"
