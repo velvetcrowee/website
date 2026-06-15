@@ -1037,14 +1037,23 @@ let detailName = "";
 function renderDetailImage() {
 	const box = $("#detail-image-box");
 	const btn = $("#btn-gen-image");
-	const img = Store.images[norm(detailName)];
-	if (img) {
-		box.innerHTML = `<img class="element-img" src="${img}" alt="${escapeHtml(detailName)}">`;
+	const local = Store.images[norm(detailName)];
+	if (local) {
+		// Oyuncunun kendi Gemini anahtarıyla ürettiği yerel görsel önceliklidir.
+		box.innerHTML = `<img class="element-img" src="${local}" alt="${escapeHtml(detailName)}">`;
 		btn.textContent = t("regenImage");
-	} else {
-		box.innerHTML = "";
-		btn.textContent = t("genImage");
+		return;
 	}
+	btn.textContent = t("genImage");
+	// Yerel yoksa: paylaşımlı havuz görseli (Pollinations) otomatik yüklenir.
+	const name = detailName;
+	box.innerHTML = `<div class="element-img loading">${t("imageLoading")}</div>`;
+	const im = new Image();
+	im.className = "element-img";
+	im.alt = name;
+	im.onload = () => { if (detailName === name) box.replaceChildren(im); };
+	im.onerror = () => { if (detailName === name) box.innerHTML = ""; }; // servis düşse de oyun bozulmaz
+	im.src = poolImageUrl(name);
 }
 
 /* Açıklamayı havuzdan tembel çek: /pack artık desc taşımıyor (hafif), bu yüzden

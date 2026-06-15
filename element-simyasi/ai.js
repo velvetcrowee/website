@@ -376,6 +376,28 @@ async function generateElementImage(el) {
 	return `data:${img.inlineData.mimeType || "image/png"};base64,${img.inlineData.data}`;
 }
 
+/* ---------- Paylaşımlı element görseli (Pollinations) ----------
+   Anahtarsız, ücretsiz görsel servisi. Element adından deterministik bir URL
+   kurulur (seed = ad hash'i) → aynı element herkeste AYNI görseli verir ve sayfa
+   yenilense de sabit kalır. Kurulum/anahtar/sunucu gerekmez; <img src> doğrudan
+   yükler. (İleride kendi R2'mize taşımak istenirse yalnızca poolImageUrl değişir.) */
+function strHash(s) {
+	// djb2 — küçük, deterministik 32-bit hash (seed için yeterli).
+	let h = 5381;
+	for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+	return h >>> 0;
+}
+
+function imagePromptText(name) {
+	return `${name}, renkli parlak oyun ikonu, sticker tarzı, sade düz arka plan, yazısız dijital illüstrasyon`;
+}
+
+function poolImageUrl(name) {
+	const seed = strHash(norm(name));
+	const prompt = encodeURIComponent(imagePromptText(name));
+	return `https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&seed=${seed}&nologo=true&model=flux`;
+}
+
 /* ---------- Üyelik (havuz sunucusu üzerinden) ---------- */
 
 async function accountRequest(path, payload) {

@@ -467,6 +467,18 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 	border-radius: var(--radius);
 	border: 1px solid #334155;
 }
+/* Havuz görseli yüklenirken gösterilen yer tutucu (Pollinations birkaç sn sürebilir). */
+.element-img.loading {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	aspect-ratio: 1 / 1;
+	margin: 0 auto;
+	color: var(--muted);
+	font-size: 0.85rem;
+	background: var(--card-2);
+	animation: pulse 1.4s ease infinite;
+}
 
 .item-list { list-style: none; }
 .item-list li {
