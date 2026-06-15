@@ -61,6 +61,7 @@ const STRINGS = {
 		genImageNeedsKey: "Görsel üretmek için Ayarlar'dan bir Gemini anahtarı girin.",
 		genImageFail: "Görsel üretilemedi, birazdan tekrar deneyin.",
 		regenImage: "🔄 Yeniden üret",
+		imageLoading: "🎨 Görsel yükleniyor…",
 		// Profil
 		profileTitle: "👤 Profil",
 		profileFirsts: "dünya ilki",
@@ -142,6 +143,7 @@ const STRINGS = {
 		genImageNeedsKey: "Enter a Gemini key in Settings to generate images.",
 		genImageFail: "Could not generate image, try again shortly.",
 		regenImage: "🔄 Regenerate",
+		imageLoading: "🎨 Loading image…",
 		profileTitle: "👤 Profile",
 		profileFirsts: "world firsts",
 		profileRecent: "Recent world firsts",
