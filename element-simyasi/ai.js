@@ -392,11 +392,14 @@ function imagePromptText(name) {
 	return `${name}, renkli parlak oyun ikonu, sticker tarzı, sade düz arka plan, yazısız dijital illüstrasyon`;
 }
 
+// Görsel önbellek sürümü: prompt/üretim mantığı değişince artır → eski (alakasız)
+// önbellekli görseller atlanır, yenisi üretilir.
+const POOL_IMG_VER = 2;
 function poolImageUrl(name) {
 	// Önce havuz Worker'ı üzerinden: görseli Cloudflare'in ağı çağırır (kullanıcının
 	// ağı Pollinations'a erişemese de çalışır) ve sunucuda önbelleğe alınır.
 	const base = (typeof activePoolUrl === "function") ? activePoolUrl() : "";
-	if (base) return base + "/image?name=" + encodeURIComponent(name);
+	if (base) return base + "/image?name=" + encodeURIComponent(name) + "&v=" + POOL_IMG_VER;
 	// Havuz yoksa doğrudan Pollinations (yedek).
 	const seed = strHash(norm(name));
 	const prompt = encodeURIComponent(imagePromptText(name));

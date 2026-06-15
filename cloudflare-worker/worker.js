@@ -250,12 +250,31 @@ function imgHash(s) {
 	for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
 	return h >>> 0;
 }
-function imageText(name) {
-	return `${name}, renkli parlak oyun ikonu, sticker tarzı, sade düz arka plan, yazısız dijital illüstrasyon`;
+/* Türkçe element adını kısa İngilizce kavrama çevirir: görsel modelleri (Flux)
+   İngilizceyi çok daha iyi anlar; Türkçe adla jenerik/alakasız görsel çıkıyor.
+   Workers AI metin modeliyle çevrilir; başarısızsa adın kendisi kullanılır. */
+async function imageConcept(env, name) {
+	if (!env.AI) return name;
+	try {
+		const r = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+			max_tokens: 16,
+			messages: [
+				{ role: "system", content: "Translate the Turkish game-element name into a short, concrete English noun phrase (1-4 words) suitable for an image. Reply with ONLY the phrase: no quotes, no punctuation, no explanation." },
+				{ role: "user", content: name },
+			],
+		});
+		const t = String((r && (r.response || r.result)) || "").trim().replace(/^["'.]+|["'.]+$/g, "");
+		if (t && t.length <= 60) return t;
+	} catch { /* çeviri olmadı → adın kendisi */ }
+	return name;
 }
-function pollinationsUrl(name) {
+/* İngilizce, ikon-odaklı prompt: tek merkezi nesne, sade arka plan, yazısız. */
+function imagePrompt(concept) {
+	return `cute flat sticker icon of ${concept}, single centered subject, bold vibrant colors, plain solid pastel background, minimalist, no text, no letters, digital illustration`;
+}
+function pollinationsUrl(name, prompt) {
 	const seed = imgHash(norm(name));
-	return `https://image.pollinations.ai/prompt/${encodeURIComponent(imageText(name))}?width=512&height=512&seed=${seed}&nologo=true&model=flux`;
+	return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&seed=${seed}&nologo=true&model=flux`;
 }
 
 /* ---------- Üyelik (benzersiz kullanıcı adı) ---------- */
@@ -453,20 +472,24 @@ export default {
 			const hit = await cache.match(cacheKey);
 			if (hit) return hit;
 
+			// Türkçe adı İngilizce kavrama çevir → alakalı görsel. Sonra ikon prompt'u kur.
+			const concept = await imageConcept(env, name);
+			const prompt = imagePrompt(concept);
+
 			let bytes = null, ctype = "image/jpeg";
 			// 1) Cloudflare Workers AI (Flux schnell) — base64 JPEG döner.
 			if (env.AI) {
 				try {
-					const out = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", { prompt: imageText(name) });
+					const out = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", { prompt });
 					if (out && out.image) bytes = Uint8Array.from(atob(out.image), (c) => c.charCodeAt(0));
-				} catch { /* AI yoksa/başarısızsa Pollinations'a düş */ }
+				} catch { /* AI başarısızsa Pollinations'a düş */ }
 			}
-			// 2) Yedek: Pollinations'ı sunucudan çağır.
+			// 2) Yedek: Pollinations'ı sunucudan çağır (aynı İngilizce prompt).
 			if (!bytes) {
 				try {
 					const ctl = new AbortController();
 					const to = setTimeout(() => ctl.abort(), 28000);
-					const up = await fetch(pollinationsUrl(name), { signal: ctl.signal, cf: { cacheEverything: true, cacheTtl: 86400 } });
+					const up = await fetch(pollinationsUrl(name, prompt), { signal: ctl.signal, cf: { cacheEverything: true, cacheTtl: 86400 } });
 					clearTimeout(to);
 					if (up && up.ok) { bytes = new Uint8Array(await up.arrayBuffer()); ctype = up.headers.get("content-type") || "image/jpeg"; }
 				} catch { /* ikisi de olmadı */ }
