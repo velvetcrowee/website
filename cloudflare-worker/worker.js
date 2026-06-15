@@ -250,10 +250,12 @@ function imgHash(s) {
 	for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
 	return h >>> 0;
 }
+function imageText(name) {
+	return `${name}, renkli parlak oyun ikonu, sticker tarzı, sade düz arka plan, yazısız dijital illüstrasyon`;
+}
 function pollinationsUrl(name) {
 	const seed = imgHash(norm(name));
-	const prompt = encodeURIComponent(`${name}, renkli parlak oyun ikonu, sticker tarzı, sade düz arka plan, yazısız dijital illüstrasyon`);
-	return `https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&seed=${seed}&nologo=true&model=flux`;
+	return `https://image.pollinations.ai/prompt/${encodeURIComponent(imageText(name))}?width=512&height=512&seed=${seed}&nologo=true&model=flux`;
 }
 
 /* ---------- Üyelik (benzersiz kullanıcı adı) ---------- */
@@ -440,8 +442,9 @@ export default {
 			return row ? json(rowToRecipe(row)) : json({}, 404);
 		}
 
-		/* Element görseli: Pollinations'ı sunucu tarafında çağırır + Cache API'de
-		   saklar. İstemci <img src="<havuz>/image?name=..."> ile kullanır. */
+		/* Element görseli: önce Cloudflare Workers AI (Flux) — tamamen Cloudflare
+		   içi, üçüncü tarafa bağımlı değil. Olmazsa Pollinations'a (sunucu tarafı)
+		   düşer. Sonuç Cache API'de saklanır → tekrar isteklerde anında. */
 		if (url.pathname === "/image" && req.method === "GET") {
 			const name = String(url.searchParams.get("name") || "").trim().slice(0, 60);
 			if (!name) return json({ error: "name gerekli" }, 400);
@@ -449,19 +452,31 @@ export default {
 			const cacheKey = new Request(url.toString());
 			const hit = await cache.match(cacheKey);
 			if (hit) return hit;
-			let up;
-			try {
-				const ctl = new AbortController();
-				const to = setTimeout(() => ctl.abort(), 28000);
-				up = await fetch(pollinationsUrl(name), { signal: ctl.signal, cf: { cacheEverything: true, cacheTtl: 86400 } });
-				clearTimeout(to);
-			} catch { return json({ error: "Görsel üretilemedi" }, 502); }
-			if (!up || !up.ok) return json({ error: "Görsel üretilemedi" }, 502);
-			const buf = await up.arrayBuffer();
+
+			let bytes = null, ctype = "image/jpeg";
+			// 1) Cloudflare Workers AI (Flux schnell) — base64 JPEG döner.
+			if (env.AI) {
+				try {
+					const out = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", { prompt: imageText(name) });
+					if (out && out.image) bytes = Uint8Array.from(atob(out.image), (c) => c.charCodeAt(0));
+				} catch { /* AI yoksa/başarısızsa Pollinations'a düş */ }
+			}
+			// 2) Yedek: Pollinations'ı sunucudan çağır.
+			if (!bytes) {
+				try {
+					const ctl = new AbortController();
+					const to = setTimeout(() => ctl.abort(), 28000);
+					const up = await fetch(pollinationsUrl(name), { signal: ctl.signal, cf: { cacheEverything: true, cacheTtl: 86400 } });
+					clearTimeout(to);
+					if (up && up.ok) { bytes = new Uint8Array(await up.arrayBuffer()); ctype = up.headers.get("content-type") || "image/jpeg"; }
+				} catch { /* ikisi de olmadı */ }
+			}
+			if (!bytes) return json({ error: "Görsel üretilemedi" }, 502);
+
 			const headers = new Headers(CORS);
-			headers.set("content-type", up.headers.get("content-type") || "image/jpeg");
+			headers.set("content-type", ctype);
 			headers.set("Cache-Control", "public, max-age=31536000, immutable");
-			const resp = new Response(buf, { status: 200, headers });
+			const resp = new Response(bytes, { status: 200, headers });
 			if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, resp.clone()));
 			return resp;
 		}
