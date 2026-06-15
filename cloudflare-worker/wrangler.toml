@@ -2,7 +2,17 @@ name = "simya-havuz"
 main = "worker.js"
 compatibility_date = "2026-06-01"
 
+# Kullanıcılar, oturum tokenları ve bulut kayıtlar KV'de tutulur.
 # `wrangler kv namespace create RECIPES` komutunun verdiği id'yi buraya yazın.
 [[kv_namespaces]]
 binding = "RECIPES"
 id = "KV_NAMESPACE_ID_BURAYA"
+
+# Tarif havuzu D1'de tutulur (günde 100.000 yazma — KV'nin 1000'inden çok yüksek).
+# `wrangler d1 create simya-db` komutunun verdiği database_id'yi buraya yazın,
+# sonra şemayı yükleyin: `wrangler d1 execute simya-db --file schema.sql`
+# (Panodan bağladıysanız bu bölüm yalnızca wrangler ile dağıtım içindir.)
+[[d1_databases]]
+binding = "DB"
+database_name = "simya-db"
+database_id = "D1_DATABASE_ID_BURAYA"

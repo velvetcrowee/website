@@ -9,12 +9,25 @@
  * birleşimleri bu sunucu üzerinden üretilir — anahtar tarayıcıya ASLA inmez.
  *
  * Uçlar:
- *   GET  /         → durum { recipes, ai }
- *   GET  /pack     → tüm havuz { "ateş++su": {name,emoji,isNew,desc,cat}, ... }
- *   POST /recipe   → { key, result } yeni tarif ekler (var olanı ezmez)
- *   POST /combine  → { a:{name,emoji}, b:{name,emoji} } → tarif (havuz → AI)
+ *   GET  /            → durum { recipes, ai }
+ *   GET  /pack        → tüm havuz { "ateş++su": {name,emoji,isNew,desc,cat,by,at}, ... }
+ *   GET  /leaderboard → en çok "dünya ilki" keşfe sahip oyuncular
+ *   POST /recipe      → { key, result } yeni tarif ekler (var olanı ezmez)
+ *   POST /combine     → { a:{name,emoji}, b:{name,emoji} } → tarif (havuz → AI)
+ *   POST /register, /login, /save, /load · GET /checkname → üyelik (KV)
  *
- * Depolama: KV (RECIPES bağlaması), tek "pack" anahtarı altında.
+ * Depolama:
+ *   D1  (DB bağlaması)      → tarifler (recipes tablosu, satır başına bir tarif).
+ *                             Günlük 100.000 yazma — KV'nin 1000'inden çok yüksek.
+ *   KV  (RECIPES bağlaması) → kullanıcılar, oturum tokenları, bulut kayıtlar.
+ *                             (Token TTL gerektiği için bunlar KV'de kalır.)
+ *
+ * D1 tablo şeması (bir kez D1 konsolunda oluşturulur):
+ *   CREATE TABLE IF NOT EXISTS recipes (
+ *     key TEXT PRIMARY KEY, name TEXT NOT NULL, emoji TEXT,
+ *     isnew INTEGER, descr TEXT, cat TEXT, finder TEXT, at TEXT
+ *   );
+ *   CREATE INDEX IF NOT EXISTS idx_recipes_finder ON recipes(finder);
  */
 
 const CORS = {
@@ -23,10 +36,14 @@ const CORS = {
 	"access-control-allow-headers": "content-type",
 };
 
-const MAX_RECIPES = 50000;
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_MODEL = "deepseek-chat";
 const GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
+
+/* D1'den okunan tarif satırlarında istemcinin beklediği sütunlar. Tabloda
+   bazı sütun adları SQL'e/eski şemaya uyacak biçimde farklıdır; istemciye
+   dönerken eşlenir (descr→desc, finder→by, isnew→isNew). */
+const RECIPE_COLS = "key, name, emoji, isnew, descr, cat, finder, at";
 
 /* Birleştirme şeması (Gemini responseSchema için). */
 const COMBINE_SCHEMA = {
@@ -40,6 +57,27 @@ const COMBINE_SCHEMA = {
 	},
 	required: ["name", "emoji", "isNew", "desc", "category"],
 };
+
+/* D1 satırını istemcinin beklediği tarif nesnesine çevirir. */
+function rowToRecipe(row) {
+	const out = {
+		name: row.name,
+		emoji: row.emoji || "✨",
+		isNew: !!row.isnew,
+		desc: row.descr || "",
+		cat: row.cat || "diger",
+	};
+	if (row.finder) out.by = row.finder;
+	if (row.at) out.at = row.at;
+	return out;
+}
+
+/* Temizlenmiş tarifi recipes tablosuna ekler (var olanı EZMEZ). */
+function insertRecipeStmt(env, key, clean) {
+	return env.DB
+		.prepare(`INSERT OR IGNORE INTO recipes (${RECIPE_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+		.bind(key, clean.name, clean.emoji, clean.isNew ? 1 : 0, clean.desc, clean.cat, clean.by || null, clean.at || null);
+}
 
 /* Gemini ile birleştir (ücretsiz katman). Model rotasyonu: limitte sıradakine
    geçer. Başarısızsa null döner ki çağıran DeepSeek'e düşebilsin. */
@@ -120,8 +158,8 @@ function json(data, status = 200) {
 
 /* KV yazma sarmalayıcısı: günlük yazma limiti (ücretsiz katmanda 1000/gün) ya
    da geçici bir hata olduğunda isteği 500 ile düşürmek yerine sessizce
-   başarısız sayarız. Böylece limit dolsa bile oyun oynanmaya devam eder —
-   birleştirme sonucu yine döner, yalnızca o an havuza/buluta yazılamaz. */
+   başarısız sayarız. Böylece limit dolsa bile üyelik/kayıt akışı kırılmaz.
+   (Tarifler artık D1'de — 100.000/gün — bu yüzden bu yalnızca KV içindir.) */
 async function safePut(env, key, value, options) {
 	try {
 		await env.RECIPES.put(key, value, options);
@@ -131,39 +169,40 @@ async function safePut(env, key, value, options) {
 	}
 }
 
-/* ---------- Toplu havuz yazımı (KV günlük yazma limitini korur) ----------
-   Her yeni tarifte KV'ye yazmak yerine yeni tarifleri bellekte biriktirir ve en
-   sık FLUSH_MIN_MS'de bir, mevcut KV havuzuyla birleştirerek TEK seferde yazarız.
-   Böylece yazma SAYISI çok düşer (limit kolay kolay dolmaz). Bekleyen tarifler
-   aynı isolate içindeki okumalardan da servis edilir; bu yüzden henüz yazılmamış
-   olsa bile aynı ikili için yapay zekâ tekrar çağrılmaz. (En iyi çaba: isolate
-   düşerse yazılmamış birkaç tarif kaybolur, oyun onları sonra yeniden üretir.) */
-let PENDING = {};            // henüz KV'ye yazılmamış yeni tarifler { key: clean }
-let LAST_FLUSH = 0;          // son KV yazma zamanı (ms)
-const FLUSH_MIN_MS = 120000; // en sık 2 dakikada bir KV'ye yaz
-
-/* Bekleyen tarifleri mevcut KV havuzuyla birleştirip yazar (throttle'lı).
-   ctx.waitUntil ile yanıtı bloklamadan çalışır. */
-async function flushPending(env, ctx, force) {
-	if (!Object.keys(PENDING).length) return;
-	const now = Date.now();
-	if (!force && now - LAST_FLUSH < FLUSH_MIN_MS) return; // henüz erken — sonraki istekte yazılır
-	LAST_FLUSH = now;
-	const batch = PENDING;
-	PENDING = {};
-	const work = (async () => {
-		// Diğer isolate'lerin eklediklerini ezmemek için taze KV ile birleştir.
-		const current = (await env.RECIPES.get("pack", "json")) || {};
-		let changed = false;
-		for (const [k, v] of Object.entries(batch)) {
-			if (!current[k] && Object.keys(current).length < MAX_RECIPES) { current[k] = v; changed = true; }
+/* ---------- Tek seferlik göç: KV "pack" → D1 ----------
+   Eski sürüm tarifleri tek bir KV "pack" anahtarında tutuyordu. D1'e geçişte
+   o tarifleri bir kez D1'e taşırız. Tablo boşsa ve KV'de pack varsa kopyalanır;
+   INSERT OR IGNORE olduğu için tekrar çalışsa bile zarar vermez. İzolat başına
+   tek kez kontrol edilir (migrationDone bayrağı). */
+let migrationDone = false;
+async function ensureMigrated(env) {
+	if (migrationDone || !env.DB) return;
+	try {
+		const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM recipes").first();
+		if (row && row.n > 0) { migrationDone = true; return; }
+		const pack = (env.RECIPES ? await env.RECIPES.get("pack", "json") : null) || {};
+		const entries = Object.entries(pack);
+		if (!entries.length) { migrationDone = true; return; }
+		const CHUNK = 40; // batch başına ifade sayısı (8 parametre × 40 = 320 bağ)
+		for (let i = 0; i < entries.length; i += CHUNK) {
+			const stmts = entries.slice(i, i + CHUNK).map(([key, r]) => {
+				const clean = {
+					name: String(r?.name || "").slice(0, 40),
+					emoji: String(r?.emoji || "✨").slice(0, 8),
+					isNew: !!r?.isNew,
+					desc: String(r?.desc || "").slice(0, 400),
+					cat: String(r?.cat || "diger").slice(0, 16),
+					by: r?.by ? String(r.by).slice(0, 24) : null,
+					at: r?.at ? String(r.at).slice(0, 30) : null,
+				};
+				return insertRecipeStmt(env, key, clean);
+			});
+			await env.DB.batch(stmts);
 		}
-		if (changed) {
-			const ok = await safePut(env, "pack", JSON.stringify(current));
-			if (!ok) Object.assign(PENDING, batch); // limit/hata → sonra tekrar denemek üzere geri koy
-		}
-	})();
-	if (ctx && ctx.waitUntil) ctx.waitUntil(work); else await work;
+		migrationDone = true;
+	} catch {
+		// Göç başarısız olursa bayrağı set etmeyiz: sonraki istekte tekrar denenir.
+	}
 }
 
 /* Türkçe-güvenli normalizasyon ve sıradan bağımsız ikili anahtarı —
@@ -323,53 +362,58 @@ export default {
 			return json(save);
 		}
 
+		/* ---------- Tarif havuzu (D1) ---------- */
+
 		if (url.pathname === "/pack" && req.method === "GET") {
-			const pack = (await env.RECIPES.get("pack", "json")) || {};
-			// Henüz yazılmamış (bekleyen) tarifleri de kat — oyuncular hemen görür.
-			return json(Object.keys(PENDING).length ? { ...pack, ...PENDING } : pack);
+			if (!env.DB) return json({});
+			await ensureMigrated(env);
+			const { results } = await env.DB.prepare(`SELECT ${RECIPE_COLS} FROM recipes`).all();
+			const pack = {};
+			for (const row of results || []) pack[row.key] = rowToRecipe(row);
+			return json(pack);
 		}
 
 		/* Liderlik tablosu: havuzdaki tüm tariflerde "ilk bulan"ları sayar,
 		   en çok ilk keşfe sahip oyuncuları sıralar. */
 		if (url.pathname === "/leaderboard" && req.method === "GET") {
-			const pack = (await env.RECIPES.get("pack", "json")) || {};
-			const counts = {};
-			for (const r of Object.values(pack)) {
-				if (r && r.by) counts[r.by] = (counts[r.by] || 0) + 1;
-			}
-			const top = Object.entries(counts)
-				.map(([name, count]) => ({ name, count }))
-				.sort((a, b) => b.count - a.count)
-				.slice(0, 30);
+			if (!env.DB) return json({ top: [], totalRecipes: 0, totalPlayers: 0 });
+			await ensureMigrated(env);
+			const { results } = await env.DB
+				.prepare("SELECT finder AS name, COUNT(*) AS count FROM recipes WHERE finder IS NOT NULL AND finder != '' GROUP BY finder ORDER BY count DESC LIMIT 30")
+				.all();
+			const totals = await env.DB
+				.prepare("SELECT (SELECT COUNT(*) FROM recipes) AS recipes, (SELECT COUNT(DISTINCT finder) FROM recipes WHERE finder IS NOT NULL AND finder != '') AS players")
+				.first();
 			// İstek yapan oyuncunun kesin sayısı (top 30 dışında olsa bile).
 			const me = url.searchParams.get("me");
-			const you = me ? (counts[me] || 0) : undefined;
-			return json({ top, totalRecipes: Object.keys(pack).length, totalPlayers: Object.keys(counts).length, you });
+			let you;
+			if (me) {
+				const r = await env.DB.prepare("SELECT COUNT(*) AS c FROM recipes WHERE finder = ?").bind(me).first();
+				you = r ? r.c : 0;
+			}
+			return json({
+				top: results || [],
+				totalRecipes: totals?.recipes || 0,
+				totalPlayers: totals?.players || 0,
+				you,
+			});
 		}
 
 		if (url.pathname === "/recipe" && req.method === "POST") {
+			if (!env.DB) return json({ ok: false, error: "Havuz deposu yapılandırılmamış" }, 501);
 			let body;
 			try { body = await req.json(); } catch { return json({ error: "Geçersiz JSON" }, 400); }
+			await ensureMigrated(env);
 			// İlk keşfeden: doğrulanmış kullanıcı adı (token) varsa o esas alınır,
 			// yoksa istemcinin gönderdiği takma ad (misafir) kullanılır.
 			const authedUser = await resolveUser(env, body?.token);
 			const credit = authedUser || body?.by || body?.result?.by;
-			const incoming = { ...(body?.result || {}), by: credit, at: new Date().toISOString() };
+			const incoming = { ...(body?.result || {}), by: credit, at: body?.at || body?.result?.at || new Date().toISOString() };
 			const clean = sanitize(body?.key, incoming);
 			if (!clean) return json({ error: "Geçersiz tarif" }, 400);
-
-			const pack = (await env.RECIPES.get("pack", "json")) || {};
-			if (pack[body.key] || PENDING[body.key]) {
-				// İlk yazan kazanır: havuz deterministik kalır.
-				return json({ ok: true, existing: true, total: Object.keys(pack).length });
-			}
-			if (Object.keys(pack).length >= MAX_RECIPES) {
-				return json({ error: "Havuz dolu" }, 507);
-			}
-			// Toplu yazıma al (KV yazma sayısını düşürür); bekleyen okumalardan görünür.
-			PENDING[body.key] = clean;
-			await flushPending(env, ctx);
-			return json({ ok: true, total: Object.keys(pack).length + 1 });
+			// İlk yazan kazanır (INSERT OR IGNORE): havuz deterministik kalır.
+			await insertRecipeStmt(env, body.key, clean).run();
+			return json({ ok: true });
 		}
 
 		if (url.pathname === "/combine" && req.method === "POST") {
@@ -384,10 +428,11 @@ export default {
 			const key = pairKey(aName, bName);
 
 			// Önce havuz: dünyada daha önce sorulduysa anında ve bedava döner.
-			const pack = (await env.RECIPES.get("pack", "json")) || {};
-			if (pack[key]) return json(pack[key]);
-			// Henüz yazılmamış ama bu isolate'te biliniyorsa yapay zekâya gitme.
-			if (PENDING[key]) return json(PENDING[key]);
+			if (env.DB) {
+				await ensureMigrated(env);
+				const row = await env.DB.prepare(`SELECT ${RECIPE_COLS} FROM recipes WHERE key = ?`).bind(key).first();
+				if (row) return json(rowToRecipe(row));
+			}
 
 			if (!env.GEMINI_KEY && !env.DEEPSEEK_KEY) {
 				return json({ error: "Ortak yapay zekâ yapılandırılmamış" }, 501);
@@ -432,19 +477,30 @@ export default {
 			});
 			if (!clean) return json({ error: "Yapay zekâ geçersiz sonuç üretti" }, 502);
 
-			// Havuza (toplu) yaz: yazımlar biriktirilip ~2 dakikada bir tek seferde
-			// KV'ye gider — günlük yazma limiti korunur. Limit dolsa bile sonuç yine
-			// döner; oyun kırılmaz.
-			PENDING[key] = clean;
-			await flushPending(env, ctx);
+			// Havuza yaz (D1, satır başına bir tarif). İlk yazan kazanır.
+			// D1 yazımı başarısız olsa bile sonuç yine döner; oyun kırılmaz.
+			if (env.DB) {
+				try {
+					if (ctx && ctx.waitUntil) ctx.waitUntil(insertRecipeStmt(env, key, clean).run());
+					else await insertRecipeStmt(env, key, clean).run();
+				} catch { /* en iyi çaba */ }
+			}
 			return json(clean);
 		}
 
 		if (url.pathname === "/" || url.pathname === "") {
-			const pack = (await env.RECIPES.get("pack", "json")) || {};
+			let recipes = 0;
+			if (env.DB) {
+				try {
+					await ensureMigrated(env);
+					const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM recipes").first();
+					recipes = row?.n || 0;
+				} catch { /* D1 erişilemedi */ }
+			}
 			return json({
 				app: "Element Simyası Havuzu",
-				recipes: Object.keys(pack).length,
+				store: env.DB ? "d1" : "yok",
+				recipes,
 				ai: Boolean(env.GEMINI_KEY || env.DEEPSEEK_KEY),
 				gemini: Boolean(env.GEMINI_KEY),
 				deepseek: Boolean(env.DEEPSEEK_KEY),

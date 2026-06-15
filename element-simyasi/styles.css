@@ -272,6 +272,7 @@ body {
 }
 .btn:active { transform: scale(0.97); }
 .btn.icon { padding: 8px 10px; font-size: 1rem; }
+.btn.icon.active { background: var(--accent-dark); color: #fff; }
 .btn.primary { background: var(--accent-dark); color: white; }
 .btn.danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
 .btn.full { width: 100%; margin-bottom: 10px; }

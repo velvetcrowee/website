@@ -16,6 +16,15 @@ toplar:
 Cloudflare'in ücretsiz katmanı bu iş için fazlasıyla yeterlidir
 (günde 100.000 istek).
 
+## Depolama: D1 (tarifler) + KV (üyelik)
+
+Tarif havuzu **Cloudflare D1** (SQLite) içinde, satır başına bir tarif olarak
+tutulur — günde **100.000 yazma** hakkı vardır (eski KV "pack" yönteminin
+1000/gün limitinin çok üstünde, bu yüzden yoğun günlerde oyun artık kilitlenmez).
+Kullanıcılar, oturum tokenları ve bulut kayıtlar TTL gerektirdiğinden **KV**'de
+kalır. D1 tablosu boşsa Worker, eski KV "pack" anahtarındaki tarifleri **ilk
+istekte otomatik olarak** D1'e taşır (tekrar çalışsa da güvenli).
+
 ## Kurulum (yaklaşık 5 dakika)
 
 1. **Cloudflare hesabı** açın (ücretsiz): https://dash.cloudflare.com/sign-up
@@ -27,14 +36,17 @@ Cloudflare'in ücretsiz katmanı bu iş için fazlasıyla yeterlidir
    cd cloudflare-worker
    wrangler login                          # tarayıcıda Cloudflare'e izin verin
    wrangler kv namespace create RECIPES    # çıktıdaki id'yi kopyalayın
+   wrangler d1 create simya-db             # çıktıdaki database_id'yi kopyalayın
    ```
 
-3. `wrangler.toml` içindeki `KV_NAMESPACE_ID_BURAYA` yazısını az önce
-   kopyaladığınız id ile değiştirin.
+3. `wrangler.toml` içindeki `KV_NAMESPACE_ID_BURAYA` ve
+   `D1_DATABASE_ID_BURAYA` yazılarını az önce kopyaladığınız id'lerle
+   değiştirin.
 
-4. Yayınlayın:
+4. D1 tablosunu oluşturun ve yayınlayın:
 
    ```sh
+   wrangler d1 execute simya-db --file schema.sql
    wrangler deploy
    ```
 
@@ -59,10 +71,15 @@ Cloudflare'in ücretsiz katmanı bu iş için fazlasıyla yeterlidir
    > İpucu: Bu satırı kendiniz düzenlemek istemezseniz Worker adresini
    > Claude'a söylemeniz yeterli; tek satırı yazıp yayınlar.
 
-> Komut satırı kullanmak istemezseniz: dash.cloudflare.com → **Workers &
-> Pages → Create Worker** deyip `worker.js` içeriğini editöre yapıştırın,
-> ardından Worker ayarlarından **KV Namespace Binding** ekleyin
-> (isim: `RECIPES`).
+> Komut satırı kullanmak istemezseniz panelden: dash.cloudflare.com →
+> **Workers & Pages → Create Worker** deyip `worker.js` içeriğini editöre
+> yapıştırın, ardından Worker → **Settings → Bindings** altından şunları
+> ekleyin:
+> - **KV Namespace Binding** — isim: `RECIPES`
+> - **D1 Database Binding** — isim: `DB`, veritabanı: `simya-db`
+>
+> D1 tablosunu da bir kez oluşturun: **Storage & Databases → D1 → simya-db →
+> Console** açıp `schema.sql` içeriğini çalıştırın.
 
 ## Ortak yapay zekâ: anahtarı sunucuya gömme (isteğe bağlı, önerilen)
 
@@ -100,16 +117,19 @@ dakikada 35 yeni istek sınırı vardır ve `deepseek-chat` çok ucuz olduğu i�
 
 | Uç | Açıklama |
 |---|---|
-| `GET /` | Havuz durumu (tarif sayısı, ortak yapay zekâ açık mı) |
+| `GET /` | Havuz durumu (tarif sayısı, depo türü, ortak yapay zekâ açık mı) |
 | `GET /pack` | Tüm havuz (oyun açılışta bunu indirir) |
+| `GET /leaderboard` | En çok "dünya ilki" keşfe sahip oyuncular |
 | `POST /recipe` | `{ key, result }` — yeni tarif ekler; var olanın üzerine yazmaz (ilk yazan kazanır, havuz deterministik kalır) |
 | `POST /combine` | `{ a:{name,emoji}, b:{name,emoji} }` — havuzdan, yoksa ortak yapay zekâdan tarif döndürür |
+| `POST /register`, `/login`, `/save`, `/load` · `GET /checkname` | Üyelik ve bulut kayıt (KV) |
 
 ## Notlar
 
 - Sunucuda **API anahtarı yoktur**; havuz yalnızca sonuçları saklar. Anahtarlar
   oyuncuların cihazında kalmaya devam eder.
-- Girdiler sunucuda doğrulanır (uzunluk/alan sınırları), havuz 50.000 tarifle
-  sınırlıdır.
-- Eşzamanlı iki yazma nadiren birbirini ezebilir (KV "son yazan kazanır");
-  oyun için zararsızdır — kaybolan tarif bir dahaki sefere yeniden eklenir.
+- Girdiler sunucuda doğrulanır (uzunluk/alan sınırları).
+- Tarifler D1'de `INSERT OR IGNORE` ile yazılır: **ilk yazan kazanır**, eşzamanlı
+  yazmalar birbirini ezmez (eski KV "son yazan kazanır" sorunu yoktur).
+- D1'in günlük 100.000 yazma hakkı, KV'nin 1000'ine göre çok daha yüksektir;
+  yoğun günlerde de havuza yazma kesilmez.
