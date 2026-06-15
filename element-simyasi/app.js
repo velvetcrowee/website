@@ -663,6 +663,49 @@ $("#btn-clear").addEventListener("click", () => {
 	renderWorkspace();
 });
 
+/* Tam ekran: telefonda element sürüklerken tarayıcının üst/alt çubukları
+   (örn. Opera'nın alt navigasyon çubuğu) kazara açılmasın diye tüm tarayıcı
+   arayüzünü gizler (Fullscreen API). PWA olarak ana ekrandan açıldıysa
+   (standalone) zaten tam ekran olduğundan ve iOS Safari sayfa tam ekranını
+   desteklemediğinden, buton yalnızca işe yarayacağı yerde (tarayıcı sekmesi +
+   API destekli) gösterilir. */
+const fsBtn = $("#btn-fullscreen");
+function fsActive() { return document.fullscreenElement || document.webkitFullscreenElement; }
+function fsSupported() {
+	const el = document.documentElement;
+	return !!(el.requestFullscreen || el.webkitRequestFullscreen);
+}
+function inStandalone() {
+	return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+}
+async function enterFullscreen() {
+	const el = document.documentElement;
+	try {
+		if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: "hide" });
+		else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+		// Tam ekranda dönüşü kilitlemeye çalış (destekleyen cihazlarda dikey kalsın).
+		if (screen.orientation && screen.orientation.lock) screen.orientation.lock("portrait").catch(() => {});
+	} catch { /* kullanıcı reddetti veya desteklenmiyor */ }
+}
+async function exitFullscreen() {
+	try {
+		if (document.exitFullscreen) await document.exitFullscreen();
+		else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+	} catch { /* yok say */ }
+}
+function syncFsBtn() {
+	const show = fsSupported() && !inStandalone();
+	fsBtn.hidden = !show;
+	if (!show) return;
+	const on = !!fsActive();
+	fsBtn.classList.toggle("active", on);
+	fsBtn.title = t(on ? "fullscreenExit" : "fullscreen");
+}
+fsBtn.addEventListener("click", () => { fsActive() ? exitFullscreen() : enterFullscreen(); });
+document.addEventListener("fullscreenchange", syncFsBtn);
+document.addEventListener("webkitfullscreenchange", syncFsBtn);
+syncFsBtn();
+
 /* Şanslı birleştirme: keşfedilmiş iki rastgele elementi panelde birleştirir. */
 $("#btn-lucky").addEventListener("click", () => {
 	const names = Object.values(Store.elements).map((e) => e.name);

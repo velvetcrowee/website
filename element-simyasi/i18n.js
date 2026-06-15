@@ -16,6 +16,8 @@ const STRINGS = {
 		lucky: "Şanslı birleştirme",
 		book: "Keşif Defteri",
 		clear: "Tuvali temizle",
+		fullscreen: "Tam ekran",
+		fullscreenExit: "Tam ekrandan çık",
 		settings: "Ayarlar",
 		// Panel
 		search: "🔍 Ara…",
@@ -89,6 +91,8 @@ const STRINGS = {
 		lucky: "Lucky combine",
 		book: "Discovery Log",
 		clear: "Clear canvas",
+		fullscreen: "Fullscreen",
+		fullscreenExit: "Exit fullscreen",
 		settings: "Settings",
 		search: "🔍 Search…",
 		slotPick: "＋ Pick",
