@@ -394,7 +394,7 @@ function imagePromptText(name) {
 
 // Görsel önbellek sürümü: prompt/üretim mantığı değişince artır → eski (alakasız)
 // önbellekli görseller atlanır, yenisi üretilir.
-const POOL_IMG_VER = 5;
+const POOL_IMG_VER = 6;
 function poolImageUrl(name) {
 	// Önce havuz Worker'ı üzerinden: görseli Cloudflare'in ağı çağırır (kullanıcının
 	// ağı Pollinations'a erişemese de çalışır) ve sunucuda önbelleğe alınır.
