@@ -398,6 +398,54 @@ function currentQuest() {
 	return q;
 }
 
+/* ---------- Günün Elementi (#3) ----------
+   Tarihten DETERMİNİSTİK seçilir → o gün herkeste AYNI hedef. Sabit bir küratör
+   listesinden (DAILY_POOL) günün indeksi hesaplanır; oyuncu bulunca seri (streak)
+   artar. Hedef, ilgi çekici ve ulaşılabilir orta-seviye elementlerden seçilir. */
+const DAILY_POOL = [
+	{ name: "Buhar", emoji: "🌫️" }, { name: "Bulut", emoji: "☁️" }, { name: "Yağmur", emoji: "🌧️" },
+	{ name: "Şimşek", emoji: "⚡" }, { name: "Fırtına", emoji: "⛈️" }, { name: "Gökkuşağı", emoji: "🌈" },
+	{ name: "Kar", emoji: "❄️" }, { name: "Buz", emoji: "🧊" }, { name: "Volkan", emoji: "🌋" },
+	{ name: "Lav", emoji: "🌋" }, { name: "Deniz", emoji: "🌊" }, { name: "Okyanus", emoji: "🌊" },
+	{ name: "Dağ", emoji: "⛰️" }, { name: "Çöl", emoji: "🏜️" }, { name: "Ada", emoji: "🏝️" },
+	{ name: "Ağaç", emoji: "🌳" }, { name: "Orman", emoji: "🌲" }, { name: "Çiçek", emoji: "🌸" },
+	{ name: "Balık", emoji: "🐟" }, { name: "Kuş", emoji: "🐦" }, { name: "Kelebek", emoji: "🦋" },
+	{ name: "İnsan", emoji: "🧑" }, { name: "Şehir", emoji: "🏙️" }, { name: "Kale", emoji: "🏰" },
+	{ name: "Robot", emoji: "🤖" }, { name: "Bilgisayar", emoji: "💻" }, { name: "İnternet", emoji: "🌐" },
+	{ name: "Yapay Zekâ", emoji: "🤖" }, { name: "Roket", emoji: "🚀" }, { name: "Astronot", emoji: "👨‍🚀" },
+	{ name: "Gezegen", emoji: "🪐" }, { name: "Yıldız", emoji: "⭐" }, { name: "Galaksi", emoji: "🌌" },
+	{ name: "Karadelik", emoji: "🕳️" }, { name: "Güneş", emoji: "☀️" }, { name: "Ay", emoji: "🌙" },
+	{ name: "Ejderha", emoji: "🐉" }, { name: "Anka Kuşu", emoji: "🔥" }, { name: "Deniz Kızı", emoji: "🧜‍♀️" },
+	{ name: "Tek Boynuz", emoji: "🦄" }, { name: "Büyücü", emoji: "🧙" }, { name: "Şövalye", emoji: "⚔️" },
+	{ name: "Kılıç", emoji: "🗡️" }, { name: "Kral", emoji: "👑" }, { name: "Hazine", emoji: "💰" },
+	{ name: "Ekmek", emoji: "🍞" }, { name: "Peynir", emoji: "🧀" }, { name: "Kebap", emoji: "🍢" },
+	{ name: "Bal", emoji: "🍯" }, { name: "Çay", emoji: "🍵" }, { name: "Müzik", emoji: "🎵" },
+	{ name: "Film", emoji: "🎬" }, { name: "Sinema", emoji: "🎬" }, { name: "Kitap", emoji: "📖" },
+	{ name: "Resim", emoji: "🖼️" }, { name: "Dans", emoji: "💃" }, { name: "Aşk", emoji: "❤️" },
+	{ name: "Mutluluk", emoji: "😊" }, { name: "Rüya", emoji: "💭" }, { name: "Bilgelik", emoji: "🦉" },
+	{ name: "Metal", emoji: "🔩" }, { name: "Çelik", emoji: "🔩" }, { name: "Cam", emoji: "🪟" },
+	{ name: "Elektrik", emoji: "⚡" }, { name: "Atom", emoji: "⚛️" }, { name: "DNA", emoji: "🧬" },
+	{ name: "Teleskop", emoji: "🔭" }, { name: "Araba", emoji: "🚗" }, { name: "Uçak", emoji: "✈️" },
+	{ name: "Gemi", emoji: "🚢" }, { name: "Tuğla", emoji: "🧱" }, { name: "Ev", emoji: "🏠" },
+];
+
+function dateStr(ms) {
+	const d = new Date(ms);
+	return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function dailyKey() { return dateStr(Date.now()); }
+function dailyHash(s) {
+	let h = 2166136261;
+	for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+	return h >>> 0;
+}
+/* O günün hedefi (herkeste aynı). */
+function dailyTarget() {
+	return DAILY_POOL[dailyHash(dailyKey()) % DAILY_POOL.length];
+}
+function dailyState() { return DB.read("daily", { doneDate: "", streak: 0 }); }
+function dailyDoneToday() { return dailyState().doneDate === dailyKey(); }
+
 /* Yeni kazanılan rozetleri kaydedip döndürür. */
 function checkBadges(ctx) {
 	const earned = Store.badges;

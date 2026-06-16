@@ -106,6 +106,7 @@ function announceResult(res) {
 	if (!res.discovered) { sfx("merge"); return; }
 	checkCollections();
 	checkLevelUp();
+	checkDaily(res);
 	if (res.isNew) {
 		toast(`🏆 İlk Keşif: ${res.emoji} ${res.name}`, "gold", 4500);
 		confetti();
@@ -148,6 +149,43 @@ function renderLevel() {
 	pill.hidden = false;
 	pill.innerHTML = `<b>${t("levelLabel")} ${li.level}</b><span class="lvl-bar"><span style="width:${Math.round(li.progress * 100)}%"></span></span>`;
 	pill.title = `${xp} XP · ${li.into}/${li.span}`;
+}
+
+/* ---------- Günün Elementi (#3) ---------- */
+
+function renderDaily() {
+	const box = $("#daily-card");
+	if (!box) return;
+	const tgt = dailyTarget();
+	const have = !!getElement(tgt.name);
+	const streak = dailyState().streak || 0;
+	const streakHtml = streak > 0 ? `<span class="daily-streak">🔥 ${streak} ${t("dailyStreak")}</span>` : "";
+	box.innerHTML = `
+		<div class="daily-head"><b>${t("dailyTitle")}</b>${streakHtml}</div>
+		<div class="daily-target${have ? " done" : ""}">
+			<span class="daily-emoji">${tgt.emoji}</span>
+			<span class="daily-name">${escapeHtml(tgt.name)}</span>
+			<span class="daily-status">${have ? t("dailyFoundLabel") : t("dailyGoal")}</span>
+		</div>`;
+}
+
+function renderDailyDot() {
+	const btn = $("#btn-book");
+	if (btn) btn.classList.toggle("has-dot", !dailyDoneToday());
+}
+
+/* Keşfedilen element o günün hedefiyse seriyi artır + kutla. */
+function checkDaily(res) {
+	if (norm(res.name) !== norm(dailyTarget().name)) return;
+	if (dailyDoneToday()) return;
+	const d = dailyState();
+	const yest = dateStr(Date.now() - 86400000);
+	d.streak = (d.doneDate === yest) ? (d.streak || 0) + 1 : 1;
+	d.doneDate = dailyKey();
+	DB.write("daily", d);
+	setTimeout(() => { toast(`🗓️ ${t("dailyDone")} 🔥${d.streak}`, "gold", 5000); confetti(); sfx("first"); }, 700);
+	renderDailyDot();
+	if (!$("#modal-book").hidden) renderDaily();
 }
 
 /* Keşiften sonra seviye atlandıysa kutla (#12). */
@@ -881,6 +919,7 @@ $("#btn-book").addEventListener("click", () => {
 
 	// Modal hemen açılsın; ağır liste ve liderlik sonraki kareye ertelenir.
 	$("#modal-book").hidden = false;
+	renderDaily();
 	requestAnimationFrame(() => {
 		renderBookReset();
 		renderWorldStats();
@@ -889,6 +928,24 @@ $("#btn-book").addEventListener("click", () => {
 		renderActivityFeed();
 	});
 });
+
+/* ---------- Yeni oyuncu tanıtımı (#22) ---------- */
+
+const TUT_STEPS = ["tut1", "tut2", "tut3", "tut4"];
+let tutIdx = 0;
+function renderTut() {
+	const k = TUT_STEPS[tutIdx];
+	$("#tut-body").innerHTML = `<h2>${t(k + "Title")}</h2><p>${t(k + "Body")}</p>`;
+	$("#tut-dots").innerHTML = TUT_STEPS.map((_, i) => `<i class="${i === tutIdx ? "on" : ""}"></i>`).join("");
+	$("#tut-next").textContent = tutIdx === TUT_STEPS.length - 1 ? t("tutDone") : t("tutNext");
+}
+function showTutorial() { tutIdx = 0; renderTut(); $("#tutorial").hidden = false; }
+function endTutorial() { $("#tutorial").hidden = true; DB.write("tutorialDone", true); }
+$("#tut-next").addEventListener("click", () => {
+	if (tutIdx < TUT_STEPS.length - 1) { tutIdx++; renderTut(); } else endTutorial();
+});
+$("#tut-skip").addEventListener("click", endTutorial);
+$("#btn-tutorial").addEventListener("click", () => { $("#modal-settings").hidden = true; showTutorial(); });
 
 /* Keşif listesi sayfalı yüklenir: çok büyük koleksiyonlarda binlerce DOM düğümü
    tek seferde basmaz; "Daha fazla göster" ile parça parça eklenir. */
@@ -1570,6 +1627,9 @@ async function init() {
 	$("#sort-select").value = Store.sortMode;
 	renderChips();
 	renderSlots();
+	renderDailyDot();
+	// İlk açılışta tanıtım (#22) — temel elementler serpiştirildikten sonra.
+	if (!DB.read("tutorialDone", false)) setTimeout(showTutorial, 650);
 
 	// Giriş yapıldıysa açılışta bulut ilerlemesini çek ve birleştir; sonra
 	// yerel ilerlemeyi de geri kaydet (iki yönlü senkron / ilk yükleme).
