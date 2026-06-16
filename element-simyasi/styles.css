@@ -757,3 +757,11 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 #tut-dots { display: flex; gap: 6px; }
 #tut-dots i { width: 7px; height: 7px; border-radius: 50%; background: #334155; }
 #tut-dots i.on { background: var(--accent); }
+
+/* ---------- Element evrimi (#5) ---------- */
+#evolve-box { margin-bottom: 10px; }
+#evolve-chain { margin-top: 8px; }
+.evo-chain { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; font-size: 1.4rem; }
+.evo-node { line-height: 1; }
+.evo-node.missing { filter: grayscale(1); opacity: 0.4; }
+.evo-arrow { color: var(--muted); font-size: 1rem; }

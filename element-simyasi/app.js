@@ -153,12 +153,20 @@ function renderLevel() {
 
 /* ---------- Günün Elementi (#3) ---------- */
 
+// Görüntülenecek seri: yalnızca bugün veya dün tamamlandıysa "canlı" sayılır
+// (aksi halde seri kırılmıştır, eski değeri göstermeyiz).
+function dailyActiveStreak() {
+	const d = dailyState();
+	const today = dailyKey(), yest = dateStr(Date.now() - 86400000);
+	return (d.doneDate === today || d.doneDate === yest) ? (d.streak || 0) : 0;
+}
+
 function renderDaily() {
 	const box = $("#daily-card");
 	if (!box) return;
 	const tgt = dailyTarget();
 	const have = !!getElement(tgt.name);
-	const streak = dailyState().streak || 0;
+	const streak = dailyActiveStreak();
 	const streakHtml = streak > 0 ? `<span class="daily-streak">🔥 ${streak} ${t("dailyStreak")}</span>` : "";
 	box.innerHTML = `
 		<div class="daily-head"><b>${t("dailyTitle")}</b>${streakHtml}</div>
@@ -174,18 +182,26 @@ function renderDailyDot() {
 	if (btn) btn.classList.toggle("has-dot", !dailyDoneToday());
 }
 
-/* Keşfedilen element o günün hedefiyse seriyi artır + kutla. */
-function checkDaily(res) {
-	if (norm(res.name) !== norm(dailyTarget().name)) return;
-	if (dailyDoneToday()) return;
+/* Günlüğü topla: oyuncu bugünün hedefine SAHİPSE (ister bugün keşfetsin ister
+   daha önce) ve henüz toplamadıysa seriyi artırır. Hem keşifte hem defter
+   açılışında çağrılır — böylece zaten sahip olunan hedef de seriyi verir. */
+function claimDaily(celebrate) {
+	const tgt = dailyTarget();
+	if (!getElement(tgt.name) || dailyDoneToday()) return false;
 	const d = dailyState();
 	const yest = dateStr(Date.now() - 86400000);
 	d.streak = (d.doneDate === yest) ? (d.streak || 0) + 1 : 1;
 	d.doneDate = dailyKey();
 	DB.write("daily", d);
-	setTimeout(() => { toast(`🗓️ ${t("dailyDone")} 🔥${d.streak}`, "gold", 5000); confetti(); sfx("first"); }, 700);
 	renderDailyDot();
 	if (!$("#modal-book").hidden) renderDaily();
+	if (celebrate) setTimeout(() => { toast(`🗓️ ${t("dailyDone")} 🔥${d.streak}`, "gold", 5000); confetti(); sfx("first"); }, 700);
+	return true;
+}
+
+/* Keşfedilen element o günün hedefiyse kutlayarak topla. */
+function checkDaily(res) {
+	if (norm(res.name) === norm(dailyTarget().name)) claimDaily(true);
 }
 
 /* Keşiften sonra seviye atlandıysa kutla (#12). */
@@ -238,8 +254,10 @@ function sortChipList(list, mode) {
 	else if (mode === "rarity") list.sort((a, b) => rarityRank(b) - rarityRank(a) || new Date(b.discoveredAt) - new Date(a.discoveredAt));
 	else if (mode === "depth") list.sort((a, b) => depthOf(b.name) - depthOf(a.name) || a.name.localeCompare(b.name, "tr"));
 	else if (mode === "cat") list.sort((a, b) => {
-		const ca = elementCategory(a), cb = elementCategory(b);
-		return ca === cb ? a.name.localeCompare(b.name, "tr") : ca.localeCompare(cb);
+		// Kategori sırası CATEGORIES dizisindeki düzene göre (ham id'ye göre değil).
+		const ra = CATEGORIES.findIndex((c) => c.id === elementCategory(a));
+		const rb = CATEGORIES.findIndex((c) => c.id === elementCategory(b));
+		return ra === rb ? a.name.localeCompare(b.name, "tr") : (ra < 0 ? 99 : ra) - (rb < 0 ? 99 : rb);
 	});
 }
 
@@ -697,7 +715,9 @@ function chipTapped(name) {
 	if (slots.length >= maxSlots) slots[maxSlots - 1] = name; // dolu: son slotu değiştir
 	else slots.push(name);
 	renderSlots();
-	if (maxSlots === 2 && slots.length === 2) combineNow();
+	// Tepsi kapasitesi dolunca otomatik birleştir (2, 3 ya da 4). Daha azıyla
+	// birleştirmek için = düğmesi kullanılır.
+	if (slots.length === maxSlots) combineNow();
 }
 
 function clearSlots() {
@@ -737,6 +757,11 @@ async function combineNow() {
 		renderSlots();
 		announceResult(res);
 		renderChips();
+		// İlk birleştirmeden sonra çoklu-birleştirme ipucunu bir kez göster.
+		if (names.length === 2 && !DB.read("multiHintShown", false)) {
+			DB.write("multiHintShown", true);
+			setTimeout(() => sideNote(t("multiHint")), 1200);
+		}
 	} catch (err) {
 		slotResult = "";
 		renderSlots();
@@ -939,6 +964,7 @@ $("#btn-book").addEventListener("click", () => {
 
 	// Modal hemen açılsın; ağır liste ve liderlik sonraki kareye ertelenir.
 	$("#modal-book").hidden = false;
+	claimDaily(true); // zaten sahip olunan günün hedefini defter açılınca topla
 	renderDaily();
 	requestAnimationFrame(() => {
 		renderBookReset();
@@ -1315,9 +1341,44 @@ function openDetail(name) {
 			lin.appendChild(li);
 		});
 	}
+	renderEvolve(e.name);
 	renderDetailImage();
 	$("#modal-detail").hidden = false;
 }
+
+/* Evrim (#5): bilinen üst formu butonda gösterir, zinciri çizer. */
+function renderEvolve(name) {
+	const btn = $("#btn-evolve");
+	const next = lookupRecipe(comboKey([name, name]));
+	btn.innerHTML = next
+		? `⬆️ ${t("evolve")} → ${next.emoji} ${escapeHtml(next.name)}`
+		: `⬆️ ${t("evolve")}`;
+	const chain = evolveChain(name);
+	const box = $("#evolve-chain");
+	if (chain.length <= 1) { box.innerHTML = ""; box.hidden = true; return; }
+	box.hidden = false;
+	box.innerHTML = `<div class="evo-chain">` + chain.map((c, i) =>
+		`${i ? '<span class="evo-arrow">→</span>' : ""}<span class="evo-node${c.have ? "" : " missing"}" title="${escapeHtml(c.name)}">${c.emoji}</span>`
+	).join("") + `</div>`;
+}
+
+/* Evrimle: elementi kendisiyle birleştirir; sonuca (üst form) geçer. */
+$("#btn-evolve").addEventListener("click", async () => {
+	const name = detailName;
+	if (!getElement(name)) return;
+	const btn = $("#btn-evolve");
+	btn.disabled = true;
+	try {
+		const res = await combine([name, name]);
+		announceResult(res);
+		renderChips();
+		openDetail(res.name); // evrilmiş forma geç (zincir ilerler)
+	} catch (err) {
+		handleCombineError(err);
+	} finally {
+		btn.disabled = false;
+	}
+});
 
 /* İstek üzerine element görseli üret (kendi Gemini anahtarıyla), cihazda sakla. */
 $("#btn-gen-image").addEventListener("click", async () => {

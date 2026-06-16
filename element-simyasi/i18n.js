@@ -81,6 +81,8 @@ const STRINGS = {
 		tut4Title: "📖 Hedefler & defter",
 		tut4Body: "Üstteki 📖 ile keşif defterini aç: günün elementi, seviyen, rozetler, koleksiyonlar ve dünya liderliği orada. Şimdi keşfe başla!",
 		addSlot: "Element ekle (çoklu birleştirme)", combineBtn: "Birleştir",
+		evolve: "Evrimle",
+		multiHint: "💡 İpucu: 3-4 element birleştirmek için ➕'ya bas",
 		// Element detayı
 		lineage: "🌳 Soy Ağacı",
 		startEl: "Bu bir başlangıç elementi — her şey onunla başladı.",
@@ -192,6 +194,8 @@ const STRINGS = {
 		tut4Title: "📖 Goals & log",
 		tut4Body: "Open the 📖 log on top: the element of the day, your level, badges, collections and world leaderboard live there. Now go explore!",
 		addSlot: "Add element (multi-combine)", combineBtn: "Combine",
+		evolve: "Evolve",
+		multiHint: "💡 Tip: tap ➕ to combine 3-4 elements",
 		lineage: "🌳 Family Tree",
 		startEl: "This is a starting element — everything began with it.",
 		genImage: "🎨 Generate image",
