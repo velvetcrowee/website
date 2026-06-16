@@ -255,16 +255,17 @@ function imgHash(s) {
    üstüne YAZI olarak basıyor. Çeviri başarısız olur ya da Türkçe sızarsa null
    döner → çağıran jenerik/güvenli prompt kullanır (görsele Türkçe yazı çıkmaz). */
 const TR_CHARS = /[çğıöşüÇĞİÖŞÜ]/;
-async function imageConcept(env, name) {
+async function imageConcept(env, name, desc) {
 	if (!env.AI) return null;
 	const models = ["@cf/meta/llama-3.1-8b-instruct", "@cf/meta/llama-3-8b-instruct"];
+	const user = desc ? `Name: ${name}\nDescription: ${desc}`.slice(0, 600) : `Name: ${name}`;
 	for (const model of models) {
 		try {
 			const r = await env.AI.run(model, {
-				max_tokens: 24,
+				max_tokens: 40,
 				messages: [
-					{ role: "system", content: "Convert the Turkish game-element name into a SHORT ENGLISH visual description (3-8 words) of what the thing concretely looks like, for an image generator. Be literal and concrete. Reply with ONLY the English description: no quotes, no Turkish words, no explanation." },
-					{ role: "user", content: name },
+					{ role: "system", content: "You are given a Turkish game element (its name and maybe a Turkish description). Output a SHORT ENGLISH visual description (5-12 words) of ONE concrete, literal scene or object that best represents how it physically looks, for an image generator. Focus on real appearance. Reply with ONLY the English description: no quotes, no Turkish words, no explanation." },
+					{ role: "user", content: user },
 				],
 			});
 			let t = String((r && (r.response != null ? r.response : r.result)) || "").trim();
@@ -273,7 +274,7 @@ async function imageConcept(env, name) {
 			// sözcüğünü içermiyor (model çevirmeyip adı aynen döndürmüşse reddet).
 			const tl = t.toLowerCase();
 			const echoes = norm(name).split(/\s+/).some((w) => w.length >= 3 && tl.includes(w));
-			if (t && t.length >= 2 && t.length <= 80 && !TR_CHARS.test(t) && !echoes) return t;
+			if (t && t.length >= 3 && t.length <= 140 && !TR_CHARS.test(t) && !echoes) return t;
 		} catch { /* sıradaki modeli dene */ }
 	}
 	return null;
@@ -281,7 +282,7 @@ async function imageConcept(env, name) {
 /* İngilizce, BİREBİR/fotoğraf-odaklı prompt: kavramın kendisini gösterir
    (yaratık/karakter/yazı değil). */
 function imagePrompt(desc) {
-	return `a realistic detailed photograph of ${desc}, the object material or scene itself, natural lighting, centered, plain clean background, no creature, no character, no face, no mascot, no text, no words, no letters, no logo, no watermark`;
+	return `a realistic, highly detailed, sharp image of ${desc}, the object material or scene itself, dramatic natural lighting, vivid colors, centered, clean simple background, no creature, no character, no face, no mascot, no people, no text, no words, no letters, no logo, no watermark`;
 }
 function pollinationsUrl(name, prompt) {
 	const seed = imgHash(norm(name));
@@ -483,9 +484,18 @@ export default {
 			const hit = await cache.match(cacheKey);
 			if (hit) return hit;
 
-			// Türkçe adı İngilizce betimlemeye çevir → alakalı, yazısız görsel. Çeviri
-			// olmazsa Türkçe sızmasın diye jenerik/güvenli prompt kullanılır.
-			const concept = await imageConcept(env, name);
+			// Elementin Türkçe açıklamasını (varsa) bağlam olarak al → çeviri daha
+			// isabetli olur (özellikle soyut kavramlarda).
+			let desc = "";
+			if (env.DB) {
+				try {
+					const dr = await env.DB.prepare("SELECT descr FROM recipes WHERE name = ? AND descr IS NOT NULL AND descr != '' LIMIT 1").bind(name).first();
+					if (dr && dr.descr) desc = String(dr.descr);
+				} catch { /* açıklama yoksa yalnızca adla çevrilir */ }
+			}
+			// Türkçe adı+açıklamayı İngilizce betimlemeye çevir → alakalı, yazısız görsel.
+			// Çeviri olmazsa Türkçe sızmasın diye jenerik/güvenli prompt kullanılır.
+			const concept = await imageConcept(env, name, desc);
 			const prompt = concept
 				? imagePrompt(concept)
 				: "an abstract colorful symbolic representation, vibrant, detailed, plain clean background, no text, no words, no letters";
