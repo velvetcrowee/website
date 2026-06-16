@@ -305,15 +305,16 @@ function memoryContext() {
 	return lines.filter(Boolean).join("\n");
 }
 
-function combinePrompt(a, b) {
+function combinePrompt(elements) {
+	const list = elements.map((e) => `"${e.emoji} ${e.name}"`).join(" + ");
 	return [
-		'Sen "Element Simyası" adlı bir element birleştirme oyununun motorusun. Sana verilen iki elementin birleşiminden doğacak EN mantıklı ve yaratıcı TEK sonucu üret.',
+		'Sen "Element Simyası" adlı bir element birleştirme oyununun motorusun. Sana verilen elementlerin birleşiminden doğacak EN mantıklı ve yaratıcı TEK sonucu üret.',
 		"Kurallar:",
 		"1. Sonuç Türkçe tek bir kavram olsun (en fazla 3 kelime), baş harfleri büyük.",
 		"2. Bağlantı mantıksal, bilimsel, kültürel veya esprili olabilir; somut nesneler, doğa olayları, canlılar, mitolojik varlıklar, teknoloji, soyut kavramlar ve popüler kültür (örn. Karadelik, Film, Ejderha, İnternet) geçerlidir.",
-		'3. Mümkünse girdilerden daha "ileri" bir kavram üret (örn. Su + Ateş = Buhar; Yıldız + Yıldız = Galaksi).',
+		'3. Mümkünse girdilerden daha "ileri" bir kavram üret (örn. Su + Ateş = Buhar; Yıldız + Yıldız = Galaksi). Üç-dört element verildiyse hepsini birleştiren tek, daha üst bir kavram üret.',
 		"4. Sonuç girdilerden biriyle aynı olmasın (gerçekten en mantıklı sonuç oysa istisna).",
-		"5. Aynı iki girdi için her zaman aynı tek cevabı verirmiş gibi en olası sonucu seç.",
+		"5. Aynı girdiler için her zaman aynı tek cevabı verirmiş gibi en olası sonucu seç.",
 		"6. emoji alanına kavramı en iyi anlatan TEK emoji yaz.",
 		"7. isNew: sonuç sıra dışı/şaşırtıcı yeni bir buluşsa true, herkesin bileceği temel bir birleşimse false.",
 		"8. desc alanına sonucu 2-3 cümleyle anlatan, hem bilgilendirici hem eğlenceli bir Türkçe açıklama yaz (en az 2 cümle).",
@@ -321,7 +322,7 @@ function combinePrompt(a, b) {
 		"",
 		memoryContext(),
 		"",
-		`Birleştirilecek elementler: "${a.emoji} ${a.name}" + "${b.emoji} ${b.name}"`,
+		`Birleştirilecek elementler: ${list}`,
 	].join("\n");
 }
 
@@ -331,14 +332,16 @@ function mockEnabled() {
 	return new URLSearchParams(location.search).has("mock") || DB.read("mock", false);
 }
 
-function mockCombine(a, b) {
-	const name = `${a.name}-${b.name} Karışımı`.slice(0, 40);
+function mockCombine(elements) {
+	const names = elements.map((e) => e.name);
+	const name = (names.join("-").slice(0, 32) + " Karışımı").slice(0, 40);
+	const seedStr = elements.map((e) => norm(e.name)).join("");
 	const cats = ["doga", "canli", "teknoloji", "uzay", "mitoloji", "soyut"];
 	return {
 		name, emoji: "🧪",
-		isNew: (norm(a.name) + norm(b.name)).length % 3 === 0,
-		desc: `${a.name} ile ${b.name} deney tüpünde buluştu.`,
-		category: cats[(norm(a.name) + norm(b.name)).length % cats.length],
+		isNew: seedStr.length % 3 === 0,
+		desc: `${names.join(", ")} deney tüpünde buluştu.`,
+		category: cats[seedStr.length % cats.length],
 	};
 }
 
@@ -442,19 +445,17 @@ function logoutAccount() {
 
 /* Ortak yapay zekâ: oyuncunun kendi anahtarı yoksa istek, havuz sunucusuna
    gider — DeepSeek anahtarı sunucuda gizli tutulur, tarayıcıya asla inmez. */
-async function poolCombine(poolUrl, a, b) {
+async function poolCombine(poolUrl, elements) {
+	const els = elements.map((e) => ({ name: e.name, emoji: e.emoji }));
+	const payload = { els, finder: getNickname(), finderId: getUserId(), token: getToken() };
+	// İki element için a/b'yi de gönder (eski worker sürümüyle uyum).
+	if (els.length === 2) { payload.a = els[0]; payload.b = els[1]; }
 	let res;
 	try {
 		res = await fetch(poolUrl + "/combine", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
-			body: JSON.stringify({
-				a: { name: a.name, emoji: a.emoji },
-				b: { name: b.name, emoji: b.emoji },
-				finder: getNickname(),
-				finderId: getUserId(),
-				token: getToken(),
-			}),
+			body: JSON.stringify(payload),
 		});
 	} catch {
 		// Ağ/bağlantı hatası → yeniden denenebilir.
@@ -477,12 +478,12 @@ async function poolCombine(poolUrl, a, b) {
 	return res.json();
 }
 
-/* İki elementi yapay zekâ ile birleştirir; { name, emoji, isNew, ... } döner. */
-async function aiCombine(a, b) {
-	if (mockEnabled()) return mockCombine(a, b);
+/* 2-4 elementi yapay zekâ ile birleştirir; { name, emoji, isNew, ... } döner. */
+async function aiCombine(elements) {
+	if (mockEnabled()) return mockCombine(elements);
 	if (!activeKey()) {
 		const poolUrl = typeof activePoolUrl === "function" ? activePoolUrl() : "";
-		if (poolUrl) return withRetry(() => poolCombine(poolUrl, a, b));
+		if (poolUrl) return withRetry(() => poolCombine(poolUrl, elements));
 	}
-	return aiJson({ prompt: combinePrompt(a, b), schema: COMBINE_SCHEMA, maxTokens: 400 });
+	return aiJson({ prompt: combinePrompt(elements), schema: COMBINE_SCHEMA, maxTokens: 400 });
 }

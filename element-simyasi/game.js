@@ -353,7 +353,8 @@ function elementDepth(name, seen = new Set()) {
 	const e = getElement(name);
 	if (!e || !e.fromPair || seen.has(norm(name))) return 0;
 	seen.add(norm(name));
-	return 1 + Math.max(elementDepth(e.fromPair[0], seen), elementDepth(e.fromPair[1], seen));
+	// fromPair 2-4 üyeli olabilir (#4 çoklu birleştirme).
+	return 1 + Math.max(0, ...e.fromPair.map((n) => elementDepth(n, seen)));
 }
 
 /* ---------- Rozetler ---------- */
@@ -460,14 +461,15 @@ function checkBadges(ctx) {
 	return fresh;
 }
 
-/* İki elementi birleştirir.
+/* 2-4 elementi birleştirir (#4 çoklu birleştirme). Tek dizi argüman alır.
    Dönüş: { name, emoji, isNew, discovered } — discovered: oyuncu için yeni mi. */
-async function combine(nameA, nameB) {
-	const a = getElement(nameA);
-	const b = getElement(nameB);
-	if (!a || !b) throw new Error("Bilinmeyen element.");
+async function combine(names) {
+	const list = (Array.isArray(names) ? names : [names]).slice(0, 4);
+	const elsIn = list.map(getElement);
+	if (elsIn.length < 2 || elsIn.some((e) => !e)) throw new Error("Bilinmeyen element.");
+	const namesC = elsIn.map((e) => e.name);
 
-	const key = pairKey(nameA, nameB);
+	const key = comboKey(namesC);
 	if (inFlight.has(key)) throw new Error("BUSY");
 	inFlight.add(key);
 	try {
@@ -478,7 +480,7 @@ async function combine(nameA, nameB) {
 		let result = lookupRecipe(key);
 		if (!result) {
 			// Yalnızca gerçek yapay zekâ çağrıları sıraya alınır.
-			result = validateResult(await enqueueAi(() => aiCombine(a, b)));
+			result = validateResult(await enqueueAi(() => aiCombine(elsIn)));
 			// Havuz ilk keşfeden bilgisini döndürmediyse (kendi anahtarıyla
 			// üreten oyuncu), iyimser olarak bu oyuncuyu ilk keşfeden say.
 			if (!result.by) { result.by = getNickname(); result.at = new Date().toISOString(); }
@@ -503,7 +505,7 @@ async function combine(nameA, nameB) {
 				cat: result.cat || CATEGORY_MAP[norm(result.name)] || "diger",
 				discoveredAt: new Date().toISOString(),
 				firstDiscovery: !!result.isNew,
-				fromPair: [a.name, b.name],
+				fromPair: namesC,
 				// Dünyada ilk keşfeden (havuzdan ya da bu oyuncu) ve tarihi.
 				firstBy: result.by || "",
 				firstAt: result.at || "",
@@ -529,7 +531,7 @@ async function combine(nameA, nameB) {
 		// Oyunun belleğine yaz: her olay kaydedilir, oyun bu hafızayla gelişir.
 		logMemory({
 			at: new Date().toISOString(),
-			pair: [a.name, b.name],
+			pair: namesC,
 			result: result.name,
 			isNew: !!result.isNew,
 			discovered,

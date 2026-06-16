@@ -34,12 +34,11 @@
 		</div>
 		<div id="vsplit" title="Sürükle: tuval/panel oranını ayarla"><span class="vsplit-grip"></span></div>
 		<aside id="panel">
-			<!-- Mobil birleştirme çubuğu: [A] + [B] = [?] -->
+			<!-- Birleştirme tepsisi: [A] + [B] (+ …) = [?]  (2-4 element, #4) -->
 			<div id="combiner">
-				<button id="slot-a" class="slot" data-name="">＋ Seç</button>
-				<span class="op">+</span>
-				<button id="slot-b" class="slot" data-name="">＋ Seç</button>
-				<span class="op">=</span>
+				<div id="slot-row"></div>
+				<button id="slot-add" class="slot-add" data-i18n-title="addSlot" title="Element ekle">➕</button>
+				<button id="slot-go" class="op-go" data-i18n-title="combineBtn" title="Birleştir">=</button>
 				<button id="slot-result" class="slot result" data-name="">?</button>
 			</div>
 			<input type="search" id="search" data-i18n-ph="search" placeholder="🔍 Ara…" autocomplete="off">

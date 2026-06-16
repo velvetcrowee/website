@@ -471,7 +471,7 @@ async function mergeItems(idA, idB) {
 	elB?.classList.add("pending");
 	elA && (elA.firstChild.textContent = "⏳");
 	try {
-		const res = await combine(a.name, b.name);
+		const res = await combine([a.name, b.name]);
 		const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
 		removeWsItem(idA);
 		removeWsItem(idB);
@@ -686,20 +686,24 @@ function isOverPanel(ev) {
    Tıklama → sağdaki çubukta birleştir (tuvale getirmeye gerek yok).
    Sürükleme → tuvale ekle veya başka chip'in üstüne bırakıp birleştir. */
 
-const slots = { a: "", b: "" };
+/* Çoklu birleştirme (#4): 2-4 elementlik dinamik tepsi. ➕ ile slot eklenir;
+   2 slotta otomatik birleşir (hızlı yol), 3-4 slotta = (Birleştir) ile. */
+let slots = [];       // doldurulmuş element adları
+let maxSlots = 2;     // 2..4
+let slotResult = "";  // sonuç adı
 
 function chipTapped(name) {
-	if ($("#slot-result").dataset.name) clearSlots(); // önceki sonuçtan sonra yeni tur
-	if (!slots.a) slots.a = name;
-	else if (!slots.b) slots.b = name;
-	else { clearSlots(); slots.a = name; }
+	if (slotResult) clearSlots(); // önceki sonuçtan sonra yeni tur
+	if (slots.length >= maxSlots) slots[maxSlots - 1] = name; // dolu: son slotu değiştir
+	else slots.push(name);
 	renderSlots();
-	if (slots.a && slots.b) combineSlots();
+	if (maxSlots === 2 && slots.length === 2) combineNow();
 }
 
 function clearSlots() {
-	slots.a = slots.b = "";
-	$("#slot-result").dataset.name = "";
+	slots = [];
+	maxSlots = 2;
+	slotResult = "";
 	renderSlots();
 }
 
@@ -709,40 +713,50 @@ function slotLabel(name) {
 }
 
 function renderSlots() {
-	$("#slot-a").textContent = slotLabel(slots.a);
-	$("#slot-a").classList.toggle("filled", !!slots.a);
-	$("#slot-b").textContent = slotLabel(slots.b);
-	$("#slot-b").classList.toggle("filled", !!slots.b);
-	const resName = $("#slot-result").dataset.name;
-	$("#slot-result").textContent = resName ? slotLabel(resName) : "?";
+	const row = $("#slot-row");
+	let html = "";
+	for (let i = 0; i < maxSlots; i++) {
+		const nm = slots[i] || "";
+		html += `<button class="slot${nm ? " filled" : ""}" data-i="${i}">${escapeHtml(nm ? slotLabel(nm) : t("slotPick"))}</button>`;
+		if (i < maxSlots - 1) html += `<span class="op">+</span>`;
+	}
+	row.innerHTML = html;
+	$("#slot-add").hidden = maxSlots >= 4;
+	const resEl = $("#slot-result");
+	resEl.dataset.name = slotResult;
+	resEl.textContent = slotResult ? slotLabel(slotResult) : "?";
 }
 
-async function combineSlots() {
+async function combineNow() {
+	if (slots.length < 2) return;
+	const names = [...slots];
 	$("#slot-result").textContent = "⏳";
 	try {
-		const res = await combine(slots.a, slots.b);
-		$("#slot-result").dataset.name = res.name;
+		const res = await combine(names);
+		slotResult = res.name;
 		renderSlots();
 		announceResult(res);
 		renderChips();
 	} catch (err) {
-		$("#slot-result").textContent = "?";
+		slotResult = "";
+		renderSlots();
 		handleCombineError(err);
 	}
 }
 
-/* Bir chip'i başka chip'in üstüne bırakınca doğrudan birleştir (panelde,
-   tuvale getirmeden). Sonuç çubukta da gösterilir. */
+/* Bir chip'i başka chip'in üstüne bırakınca doğrudan birleştir (2 element). */
 async function combineByNames(nameA, nameB) {
-	slots.a = nameA; slots.b = nameB;
+	slots = [nameA, nameB];
+	maxSlots = 2;
+	slotResult = "";
 	renderSlots();
-	await combineSlots();
+	await combineNow();
 }
 
 /* Panelden bir chip'i tuvaldeki öğenin üstüne bırakınca tuvalde birleştir. */
 async function combineDroppedOnCanvas(nameA, nameB, pos) {
 	try {
-		const res = await combine(nameA, nameB);
+		const res = await combine([nameA, nameB]);
 		addWsItem(res.name, pos.x, pos.y, true);
 		announceResult(res);
 		renderChips();
@@ -751,13 +765,19 @@ async function combineDroppedOnCanvas(nameA, nameB, pos) {
 	}
 }
 
-$("#slot-a").addEventListener("click", () => { slots.a = ""; $("#slot-result").dataset.name = ""; renderSlots(); });
-$("#slot-b").addEventListener("click", () => { slots.b = ""; $("#slot-result").dataset.name = ""; renderSlots(); });
+// Slot'a dokununca o slotu temizle (dolu slotları kaldırır).
+$("#slot-row").addEventListener("click", (ev) => {
+	const b = ev.target.closest(".slot");
+	if (!b) return;
+	const i = +b.dataset.i;
+	if (slots[i] !== undefined) { slots.splice(i, 1); slotResult = ""; renderSlots(); }
+});
+$("#slot-add").addEventListener("click", () => { if (maxSlots < 4) { maxSlots++; renderSlots(); } });
+$("#slot-go").addEventListener("click", combineNow);
 $("#slot-result").addEventListener("click", () => {
-	const name = $("#slot-result").dataset.name;
-	if (!name) return;
+	if (!slotResult) return;
 	const r = workspaceEl.getBoundingClientRect();
-	addWsItem(name, r.width / 2 - 40, r.height / 2 - 18, true);
+	addWsItem(slotResult, r.width / 2 - 40, r.height / 2 - 18, true);
 	clearSlots();
 });
 
@@ -969,7 +989,7 @@ function renderBookMore() {
 		const li = document.createElement("li");
 		li.dataset.name = e.name;
 		const date = new Date(e.discoveredAt).toLocaleDateString(loc, { day: "numeric", month: "long" });
-		const from = e.fromPair ? `${e.fromPair[0]} + ${e.fromPair[1]}` : t("startEl2");
+		const from = e.fromPair ? e.fromPair.join(" + ") : t("startEl2");
 		const first = e.firstBy ? ` <span class="first-tag">🥇 ${escapeHtml(e.firstBy)}</span>` : "";
 		li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}${first}</span>
 			<span class="sub">${escapeHtml(from)} — ${date}</span>`;
@@ -1207,8 +1227,7 @@ function lineageSteps(name, seen = new Set(), out = []) {
 	if (!e || !e.fromPair || seen.has(norm(name)) || out.length >= 30) return out;
 	seen.add(norm(name));
 	out.push(e);
-	lineageSteps(e.fromPair[0], seen, out);
-	lineageSteps(e.fromPair[1], seen, out);
+	e.fromPair.forEach((n) => lineageSteps(n, seen, out)); // 2-4 üye (#4)
 	return out;
 }
 
@@ -1241,7 +1260,7 @@ function renderDetailImage() {
 async function loadDescLazy(e) {
 	const poolUrl = activePoolUrl();
 	if (!poolUrl || !e.fromPair) return;
-	const key = pairKey(e.fromPair[0], e.fromPair[1]);
+	const key = comboKey(e.fromPair);
 	try {
 		const res = await fetch(poolUrl + "/recipe?key=" + encodeURIComponent(key));
 		if (!res.ok) return;
@@ -1292,7 +1311,7 @@ function openDetail(name) {
 		steps.forEach((s) => {
 			const li = document.createElement("li");
 			li.dataset.name = s.name;
-			li.innerHTML = `<span>${fmtEl(s.name)}</span><span class="sub">${fmtEl(s.fromPair[0])} + ${fmtEl(s.fromPair[1])}</span>`;
+			li.innerHTML = `<span>${fmtEl(s.name)}</span><span class="sub">${s.fromPair.map(fmtEl).join(" + ")}</span>`;
 			lin.appendChild(li);
 		});
 	}

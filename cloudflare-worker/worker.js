@@ -238,6 +238,10 @@ function norm(s) {
 function pairKey(a, b) {
 	return [norm(a), norm(b)].sort((x, y) => x.localeCompare(y, "tr")).join("++");
 }
+/* N elementli (çoklu) birleştirme anahtarı (#4). İki element için pairKey ile aynı. */
+function comboKey(names) {
+	return names.map(norm).sort((x, y) => x.localeCompare(y, "tr")).join("++");
+}
 
 /* ---------- Element görseli (Pollinations proxy) ----------
    Görseli istemci yerine SUNUCU çağırır: kullanıcının ağı Pollinations'a
@@ -321,10 +325,10 @@ async function resolveUser(env, token) {
 
 /* İstemciden gelen veri güvensizdir: anahtar ve alanlar sıkıca doğrulanır. */
 function sanitize(key, result) {
-	if (typeof key !== "string" || key.length > 90) return null;
+	if (typeof key !== "string" || key.length > 170) return null;
 	const parts = key.split("++");
-	if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
-	if (parts[0].length > 40 || parts[1].length > 40) return null;
+	// 2-4 bileşen (#4 çoklu birleştirme), her biri dolu ve <=40 karakter.
+	if (parts.length < 2 || parts.length > 4 || parts.some((p) => !p || p.length > 40)) return null;
 	const name = String(result?.name || "").trim().slice(0, 40);
 	if (!name) return null;
 	const emoji = String(result?.emoji || "✨").trim().slice(0, 8);
@@ -610,13 +614,15 @@ export default {
 		if (url.pathname === "/combine" && req.method === "POST") {
 			let body;
 			try { body = await req.json(); } catch { return json({ error: "Geçersiz JSON" }, 400); }
-			const aName = String(body?.a?.name || "").trim().slice(0, 40);
-			const bName = String(body?.b?.name || "").trim().slice(0, 40);
-			if (!aName || !bName) return json({ error: "Geçersiz elementler" }, 400);
-			const aEmoji = String(body?.a?.emoji || "✨").slice(0, 8);
-			const bEmoji = String(body?.b?.emoji || "✨").slice(0, 8);
+			// 2-4 element: yeni istemci `els` dizisi gönderir; eski istemci a/b gönderir.
+			let raw0 = Array.isArray(body?.els) ? body.els : [body?.a, body?.b];
+			const parts = raw0
+				.map((p) => ({ name: String(p?.name || "").trim().slice(0, 40), emoji: String(p?.emoji || "✨").slice(0, 8) }))
+				.filter((p) => p.name)
+				.slice(0, 4);
+			if (parts.length < 2) return json({ error: "Geçersiz elementler" }, 400);
 
-			const key = pairKey(aName, bName);
+			const key = comboKey(parts.map((p) => p.name));
 
 			// Önce havuz: dünyada daha önce sorulduysa anında ve bedava döner.
 			if (env.DB) {
@@ -635,19 +641,19 @@ export default {
 			}
 
 			const prompt = [
-				'Sen "Element Simyası" adlı bir element birleştirme oyununun motorusun. Sana verilen iki elementin birleşiminden doğacak EN mantıklı ve yaratıcı TEK sonucu üret.',
+				'Sen "Element Simyası" adlı bir element birleştirme oyununun motorusun. Sana verilen elementlerin birleşiminden doğacak EN mantıklı ve yaratıcı TEK sonucu üret.',
 				"Kurallar:",
 				"1. Sonuç Türkçe tek bir kavram olsun (en fazla 3 kelime), baş harfleri büyük.",
 				"2. Bağlantı mantıksal, bilimsel, kültürel veya esprili olabilir; somut nesneler, doğa olayları, canlılar, mitolojik varlıklar, teknoloji, soyut kavramlar ve popüler kültür (örn. Karadelik, Film, Ejderha, İnternet) geçerlidir.",
-				'3. Mümkünse girdilerden daha "ileri" bir kavram üret (örn. Su + Ateş = Buhar; Yıldız + Yıldız = Galaksi).',
+				'3. Mümkünse girdilerden daha "ileri" bir kavram üret (örn. Su + Ateş = Buhar). Üç-dört element verildiyse hepsini birleştiren tek, daha üst bir kavram üret.',
 				"4. Sonuç girdilerden biriyle aynı olmasın (gerçekten en mantıklı sonuç oysa istisna).",
-				"5. Aynı iki girdi için her zaman aynı tek cevabı verirmiş gibi en olası sonucu seç.",
+				"5. Aynı girdiler için her zaman aynı tek cevabı verirmiş gibi en olası sonucu seç.",
 				"6. emoji alanına kavramı en iyi anlatan TEK emoji yaz.",
 				"7. isNew: sonuç sıra dışı/şaşırtıcı yeni bir buluşsa true, herkesin bileceği temel bir birleşimse false.",
 				"8. desc alanına sonucu 2-3 cümleyle anlatan, hem bilgilendirici hem eğlenceli bir Türkçe açıklama yaz (en az 2 cümle).",
 				"9. category alanına şunlardan birini yaz: doga, canli, yiyecek, insan, teknoloji, uzay, mitoloji, soyut.",
 				"",
-				`Birleştirilecek elementler: "${aEmoji} ${aName}" + "${bEmoji} ${bName}"`,
+				`Birleştirilecek elementler: ${parts.map((p) => `"${p.emoji} ${p.name}"`).join(" + ")}`,
 			].join("\n");
 
 			// Önce ücretsiz Gemini; başarısız/limit ise ücretli DeepSeek'e düş.

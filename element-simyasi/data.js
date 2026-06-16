@@ -139,6 +139,12 @@ function pairKey(a, b) {
 	return [norm(a), norm(b)].sort((x, y) => x.localeCompare(y, "tr")).join("++");
 }
 
+/* N elementli (çoklu) birleştirme anahtarı (#4): sıradan bağımsız. İki element
+   için comboKey([a,b]) === pairKey(a,b) (geriye dönük uyumlu). */
+function comboKey(names) {
+	return names.map(norm).sort((x, y) => x.localeCompare(y, "tr")).join("++");
+}
+
 /* Oyuncunun kalıcı, benzersiz kimliği (bir kez üretilir, cihazda saklanır). */
 function getUserId() {
 	let id = DB.read("uid", null);

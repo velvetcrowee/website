@@ -282,8 +282,10 @@ body {
 /* ---------- Birleştirme çubuğu (panelde, masaüstü + mobil) ---------- */
 
 #combiner { display: flex; align-items: center; gap: 6px; }
-#combiner .slot {
+#slot-row { flex: 1; display: flex; align-items: center; gap: 4px; min-width: 0; }
+#combiner .slot, #slot-row .slot {
 	flex: 1;
+	min-width: 0;
 	background: var(--card-2);
 	border: 1px dashed #475569;
 	border-radius: 10px;
@@ -295,9 +297,23 @@ body {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-#combiner .slot.filled { border-style: solid; border-color: var(--accent); }
-#combiner .slot.result { border-color: var(--gold); }
-#combiner .op { color: var(--muted); font-weight: 700; }
+#combiner .slot.filled, #slot-row .slot.filled { border-style: solid; border-color: var(--accent); }
+#combiner .slot.result { flex: 1; border-color: var(--gold); }
+#combiner .op, #slot-row .op { color: var(--muted); font-weight: 700; flex-shrink: 0; }
+/* ➕ slot ekle + = birleştir butonları (#4). */
+.slot-add, .op-go {
+	flex-shrink: 0;
+	background: var(--card-2);
+	border: 1px solid #334155;
+	color: var(--text);
+	border-radius: 10px;
+	padding: 9px 8px;
+	font-size: 0.85rem;
+	font-weight: 700;
+	cursor: pointer;
+}
+.op-go { color: var(--muted); }
+.slot-add:active, .op-go:active { transform: scale(0.95); }
 
 /* ---------- Butonlar ---------- */
 
