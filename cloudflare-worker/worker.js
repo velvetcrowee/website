@@ -250,28 +250,38 @@ function imgHash(s) {
 	for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
 	return h >>> 0;
 }
-/* Türkçe element adını kısa İngilizce kavrama çevirir: görsel modelleri (Flux)
-   İngilizceyi çok daha iyi anlar; Türkçe adla jenerik/alakasız görsel çıkıyor.
-   Workers AI metin modeliyle çevrilir; başarısızsa adın kendisi kullanılır. */
+/* Türkçe element adını kısa İngilizce GÖRSEL betimlemeye çevirir: görsel modelleri
+   İngilizceyi çok daha iyi anlar ve Türkçe ad doğrudan verilirse onu görselin
+   üstüne YAZI olarak basıyor. Çeviri başarısız olur ya da Türkçe sızarsa null
+   döner → çağıran jenerik/güvenli prompt kullanır (görsele Türkçe yazı çıkmaz). */
+const TR_CHARS = /[çğıöşüÇĞİÖŞÜ]/;
 async function imageConcept(env, name) {
-	if (!env.AI) return name;
-	try {
-		const r = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
-			max_tokens: 16,
-			messages: [
-				{ role: "system", content: "Translate the Turkish game-element name into a short, concrete English noun phrase (1-4 words) suitable for an image. Reply with ONLY the phrase: no quotes, no punctuation, no explanation." },
-				{ role: "user", content: name },
-			],
-		});
-		const t = String((r && (r.response || r.result)) || "").trim().replace(/^["'.]+|["'.]+$/g, "");
-		if (t && t.length <= 60) return t;
-	} catch { /* çeviri olmadı → adın kendisi */ }
-	return name;
+	if (!env.AI) return null;
+	const models = ["@cf/meta/llama-3.1-8b-instruct", "@cf/meta/llama-3-8b-instruct"];
+	for (const model of models) {
+		try {
+			const r = await env.AI.run(model, {
+				max_tokens: 24,
+				messages: [
+					{ role: "system", content: "Convert the Turkish game-element name into a SHORT ENGLISH visual description (3-8 words) of what the thing concretely looks like, for an image generator. Be literal and concrete. Reply with ONLY the English description: no quotes, no Turkish words, no explanation." },
+					{ role: "user", content: name },
+				],
+			});
+			let t = String((r && (r.response != null ? r.response : r.result)) || "").trim();
+			t = t.replace(/^["'.\s]+|["'.\s]+$/g, "").replace(/\s+/g, " ");
+			// Geçerli İngilizce mi? Boş değil, Türkçe karakter yok ve adın bir
+			// sözcüğünü içermiyor (model çevirmeyip adı aynen döndürmüşse reddet).
+			const tl = t.toLowerCase();
+			const echoes = norm(name).split(/\s+/).some((w) => w.length >= 3 && tl.includes(w));
+			if (t && t.length >= 2 && t.length <= 80 && !TR_CHARS.test(t) && !echoes) return t;
+		} catch { /* sıradaki modeli dene */ }
+	}
+	return null;
 }
-/* İngilizce, BİREBİR/temsili prompt: kavramın kendisini net ve tanınır biçimde
-   çizer (sevimli maskot/karakter değil). */
-function imagePrompt(concept) {
-	return `a realistic detailed photo-like depiction of ${concept} as a real object, material, place or natural phenomenon, show the thing itself, NOT a creature, not a monster, not a character, no face, no eyes, no mascot, no anthropomorphism, centered, clean plain background, sharp, no text, no letters, no words`;
+/* İngilizce, BİREBİR/fotoğraf-odaklı prompt: kavramın kendisini gösterir
+   (yaratık/karakter/yazı değil). */
+function imagePrompt(desc) {
+	return `a realistic detailed photograph of ${desc}, the object material or scene itself, natural lighting, centered, plain clean background, no creature, no character, no face, no mascot, no text, no words, no letters, no logo, no watermark`;
 }
 function pollinationsUrl(name, prompt) {
 	const seed = imgHash(norm(name));
@@ -473,9 +483,12 @@ export default {
 			const hit = await cache.match(cacheKey);
 			if (hit) return hit;
 
-			// Türkçe adı İngilizce kavrama çevir → alakalı görsel. Sonra ikon prompt'u kur.
+			// Türkçe adı İngilizce betimlemeye çevir → alakalı, yazısız görsel. Çeviri
+			// olmazsa Türkçe sızmasın diye jenerik/güvenli prompt kullanılır.
 			const concept = await imageConcept(env, name);
-			const prompt = imagePrompt(concept);
+			const prompt = concept
+				? imagePrompt(concept)
+				: "an abstract colorful symbolic representation, vibrant, detailed, plain clean background, no text, no words, no letters";
 
 			let bytes = null, ctype = "image/jpeg";
 			// 1) Cloudflare Workers AI (Flux schnell) — base64 JPEG döner.
