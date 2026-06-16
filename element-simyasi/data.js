@@ -80,6 +80,16 @@ const Store = {
 	get images() { return DB.read("images", {}); },
 	set images(v) { DB.write("images", v); },
 
+	// Favori klasörleri (#21): [{ id, name, emoji }] ve atama { norm(ad): folderId }.
+	get folders() { return DB.read("folders", []); },
+	set folders(v) { DB.write("folders", v); },
+	get elemFolders() { return DB.read("elemFolders", {}); },
+	set elemFolders(v) { DB.write("elemFolders", v); },
+
+	// Panel sıralama tercihi (#17): "recent" | "name" | "rarity" | "depth" | "cat".
+	get sortMode() { return DB.read("sortMode", "recent"); },
+	set sortMode(v) { DB.write("sortMode", v); },
+
 	resetAll() {
 		Object.keys(localStorage)
 			.filter((k) => k.startsWith("simya."))
@@ -175,8 +185,41 @@ function toggleFavorite(name) {
 	const key = norm(name);
 	const favs = Store.favorites;
 	const i = favs.indexOf(key);
-	if (i >= 0) { favs.splice(i, 1); Store.favorites = favs; return false; }
+	if (i >= 0) {
+		favs.splice(i, 1); Store.favorites = favs;
+		setElemFolder(name, ""); // favorilikten çıkınca klasör atamasını da temizle
+		return false;
+	}
 	favs.push(key);
 	Store.favorites = favs;
 	return true;
 }
+
+/* ---------- Favori klasörleri (#21) ---------- */
+
+function addFolder(name, emoji) {
+	name = String(name || "").trim().slice(0, 20);
+	if (!name) return null;
+	const folders = Store.folders;
+	const id = "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+	folders.push({ id, name, emoji: emoji || "📁" });
+	Store.folders = folders;
+	return id;
+}
+
+function deleteFolder(id) {
+	Store.folders = Store.folders.filter((f) => f.id !== id);
+	const map = Store.elemFolders;
+	let changed = false;
+	for (const k of Object.keys(map)) if (map[k] === id) { delete map[k]; changed = true; }
+	if (changed) Store.elemFolders = map;
+}
+
+/* Elementi bir klasöre atar (id boşsa atamayı kaldırır). */
+function setElemFolder(name, id) {
+	const map = Store.elemFolders;
+	const k = norm(name);
+	if (id) map[k] = id; else delete map[k];
+	Store.elemFolders = map;
+}
+function elemFolder(name) { return Store.elemFolders[norm(name)] || ""; }

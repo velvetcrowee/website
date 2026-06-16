@@ -127,6 +127,39 @@ body {
 	background: rgba(124, 58, 237, 0.18);
 }
 
+/* Panel araçları: sıralama (#17) + favori klasör butonu (#21). */
+#panel-tools { display: flex; gap: 6px; align-items: center; }
+#sort-select {
+	flex: 1; min-width: 0;
+	background: var(--card-2);
+	border: 1px solid #334155;
+	color: var(--text);
+	border-radius: 10px;
+	padding: 7px 10px;
+	font-size: 0.82rem;
+}
+#sort-select:focus { outline: 2px solid var(--accent-dark); }
+
+#folder-bar { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
+.folder-chip {
+	flex-shrink: 0;
+	background: var(--card-2);
+	border: 1px solid #334155;
+	border-radius: 999px;
+	color: var(--muted);
+	padding: 5px 10px;
+	font-size: 0.78rem;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.folder-chip.active { border-color: var(--gold); color: var(--text); background: rgba(251, 191, 36, 0.14); }
+.folder-row {
+	display: flex; align-items: center; justify-content: space-between; gap: 8px;
+	padding: 7px 4px; border-bottom: 1px solid #1e293b; font-size: 0.9rem;
+}
+.folder-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-row select { background: var(--card-2); border: 1px solid #334155; color: var(--text); border-radius: 8px; padding: 5px 8px; max-width: 50%; }
+
 #quest-bar {
 	position: absolute;
 	top: 10px;

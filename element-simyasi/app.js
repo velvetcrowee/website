@@ -190,6 +190,99 @@ $("#cat-filter").addEventListener("click", (ev) => {
 	renderChips();
 });
 
+/* ---------- Sıralama (#17) ---------- */
+
+// "" = filtre yok · "*" = tüm favoriler · <id> = belirli klasör.
+let activeFolder = "";
+
+function sortChipList(list, mode) {
+	if (mode === "name") list.sort((a, b) => a.name.localeCompare(b.name, "tr"));
+	else if (mode === "rarity") list.sort((a, b) => rarityRank(b) - rarityRank(a) || new Date(b.discoveredAt) - new Date(a.discoveredAt));
+	else if (mode === "depth") list.sort((a, b) => depthOf(b.name) - depthOf(a.name) || a.name.localeCompare(b.name, "tr"));
+	else if (mode === "cat") list.sort((a, b) => {
+		const ca = elementCategory(a), cb = elementCategory(b);
+		return ca === cb ? a.name.localeCompare(b.name, "tr") : ca.localeCompare(cb);
+	});
+}
+
+$("#sort-select").addEventListener("change", (e) => { Store.sortMode = e.target.value; renderChips(); });
+
+/* ---------- Favori klasörleri (#21) ---------- */
+
+function renderFolderBar() {
+	const bar = $("#folder-bar");
+	const folders = Store.folders;
+	const favCount = Store.favorites.length;
+	if (!folders.length && !favCount) { bar.hidden = true; bar.innerHTML = ""; return; }
+	bar.hidden = false;
+	const map = Store.elemFolders;
+	const chips = [`<button class="folder-chip${activeFolder === "" ? " active" : ""}" data-folder="">${t("all")}</button>`];
+	chips.push(`<button class="folder-chip${activeFolder === "*" ? " active" : ""}" data-folder="*">${t("allFavorites")} (${favCount})</button>`);
+	for (const f of folders) {
+		const c = Object.values(map).filter((id) => id === f.id).length;
+		chips.push(`<button class="folder-chip${activeFolder === f.id ? " active" : ""}" data-folder="${f.id}">${f.emoji} ${escapeHtml(f.name)} (${c})</button>`);
+	}
+	bar.innerHTML = chips.join("");
+}
+
+$("#folder-bar").addEventListener("click", (ev) => {
+	const b = ev.target.closest(".folder-chip");
+	if (!b) return;
+	activeFolder = b.dataset.folder;
+	renderFolderBar();
+	renderChips();
+});
+
+function openFolders() {
+	renderFolderList();
+	renderFolderAssign();
+	$("#modal-folders").hidden = false;
+}
+$("#btn-folders").addEventListener("click", openFolders);
+
+$("#folder-add").addEventListener("click", () => {
+	const name = $("#folder-name").value.trim();
+	if (!name) return;
+	addFolder(name);
+	$("#folder-name").value = "";
+	renderFolderList(); renderFolderAssign(); renderFolderBar();
+});
+
+function renderFolderList() {
+	const box = $("#folder-list");
+	const folders = Store.folders;
+	box.innerHTML = folders.map((f) =>
+		`<div class="folder-row"><span>${f.emoji} ${escapeHtml(f.name)}</span><button class="del" data-del="${f.id}">${t("deleteFolder")}</button></div>`
+	).join("");
+}
+
+$("#folder-list").addEventListener("click", (ev) => {
+	const b = ev.target.closest("[data-del]");
+	if (!b) return;
+	deleteFolder(b.dataset.del);
+	if (activeFolder === b.dataset.del) activeFolder = "";
+	renderFolderList(); renderFolderAssign(); renderFolderBar(); renderChips();
+});
+
+function renderFolderAssign() {
+	const box = $("#folder-assign");
+	const favs = Store.favorites.map((k) => getElement(k)).filter(Boolean);
+	if (!favs.length) { box.innerHTML = `<p class="muted">${t("noFavorites")}</p>`; return; }
+	const folders = Store.folders;
+	const opts = (sel) => `<option value="">${t("noFolder")}</option>` +
+		folders.map((f) => `<option value="${f.id}"${sel === f.id ? " selected" : ""}>${f.emoji} ${escapeHtml(f.name)}</option>`).join("");
+	box.innerHTML = favs.map((e) =>
+		`<div class="folder-row"><span>${e.emoji} ${escapeHtml(e.name)}</span><select data-elem="${escapeHtml(e.name)}">${opts(elemFolder(e.name))}</select></div>`
+	).join("");
+}
+
+$("#folder-assign").addEventListener("change", (ev) => {
+	const sel = ev.target.closest("select[data-elem]");
+	if (!sel) return;
+	setElemFolder(sel.dataset.elem, sel.value);
+	renderFolderBar();
+});
+
 /* Anahtarlı (keyed) artımlı render: tüm listeyi sıfırdan kurmak yerine var olan
    chip düğümlerini yeniden kullanır, yalnızca değişenleri günceller ve sırayı
    yerinde düzeltir. Favori sabitleme, birleştirme ve havuz tazelemesi gibi sık
@@ -227,9 +320,14 @@ function renderChips() {
 	const list = elementList()
 		.filter((e) => !q || norm(e.name).includes(q))
 		.filter((e) => !activeCat || elementCategory(e) === activeCat)
-		// Favoriler her zaman en üstte (sabitlenmiş) görünür. sort kararlıdır:
-		// grup içinde keşif sırası (yenilik) korunur.
-		.sort((a, b) => (isFavorite(b.name) ? 1 : 0) - (isFavorite(a.name) ? 1 : 0));
+		.filter((e) => !activeFolder || (activeFolder === "*" ? isFavorite(e.name) : elemFolder(e.name) === activeFolder));
+	const mode = Store.sortMode;
+	if (mode === "recent") {
+		// En yeni (varsayılan): keşif sırası + favoriler en üstte (kararlı sort).
+		list.sort((a, b) => (isFavorite(b.name) ? 1 : 0) - (isFavorite(a.name) ? 1 : 0));
+	} else {
+		sortChipList(list, mode);
+	}
 
 	const seen = new Set();
 	let prev = null;
@@ -251,6 +349,7 @@ function renderChips() {
 	renderCount();
 	renderLevel();
 	renderCatFilter();
+	renderFolderBar();
 }
 
 /* Yıldıza tıklayınca elementi favorile/çıkar (sürüklemeyi başlatmaz). */
@@ -1468,6 +1567,7 @@ async function init() {
 	}
 
 	renderWorkspace();
+	$("#sort-select").value = Store.sortMode;
 	renderChips();
 	renderSlots();
 

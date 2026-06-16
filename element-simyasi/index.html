@@ -43,6 +43,17 @@
 				<button id="slot-result" class="slot result" data-name="">?</button>
 			</div>
 			<input type="search" id="search" data-i18n-ph="search" placeholder="🔍 Ara…" autocomplete="off">
+			<div id="panel-tools">
+				<select id="sort-select" title="Sırala">
+					<option value="recent" data-i18n="sortRecent">En yeni</option>
+					<option value="name" data-i18n="sortName">İsim (A-Z)</option>
+					<option value="rarity" data-i18n="sortRarity">Nadirlik</option>
+					<option value="depth" data-i18n="sortDepth">Derinlik</option>
+					<option value="cat" data-i18n="sortCat">Kategori</option>
+				</select>
+				<button id="btn-folders" class="btn icon" data-i18n-title="folders" title="Favori klasörleri">🗂️</button>
+			</div>
+			<div id="folder-bar"></div>
 			<div id="cat-filter"></div>
 			<div id="chip-list"></div>
 		</aside>
@@ -101,6 +112,24 @@
 				<button class="del modal-close">✕</button>
 			</div>
 			<div id="profile-body"></div>
+		</div>
+	</div>
+
+	<!-- Favori klasörleri (#21) -->
+	<div id="modal-folders" class="modal" hidden>
+		<div class="modal-card">
+			<div class="row-between">
+				<h2 data-i18n="foldersTitle">🗂️ Favori Klasörleri</h2>
+				<button class="del modal-close">✕</button>
+			</div>
+			<p class="muted" data-i18n="foldersHint">Favori elementlerini klasörlere ayırıp panelde gruplandır.</p>
+			<div class="row">
+				<input type="text" id="folder-name" maxlength="20" data-i18n-ph="folderName" placeholder="Klasör adı">
+				<button id="folder-add" class="btn primary" data-i18n="addFolder">Ekle</button>
+			</div>
+			<div id="folder-list"></div>
+			<h3 data-i18n="assignTitle">Elementleri klasörle</h3>
+			<div id="folder-assign"></div>
 		</div>
 	</div>
 
