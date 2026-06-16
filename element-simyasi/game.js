@@ -374,7 +374,25 @@ const BADGES = [
 	{ id: "avci", emoji: "🎯", name: "Hedef Avcısı", goal: "İlk hedefini tamamla", test: (s) => (s.quests || 0) >= 1 },
 	{ id: "keskin", emoji: "🏹", name: "Keskin Nişancı", goal: "10 hedef tamamla", test: (s) => (s.quests || 0) >= 10 },
 	{ id: "cokyonlu", emoji: "🌈", name: "Çok Yönlü", goal: "8 farklı kategoriden element keşfet", test: (s, ctx) => ctx.catCount >= 8 },
+	{ id: "evrimci", emoji: "🧬", name: "Evrimci", goal: "Bir elementi 3 kez evrimle (kendisiyle birleştir)", test: (s) => (s.evolves || 0) >= 3 },
 ];
+
+/* Evrim zinciri (#5): bir elementin kendisiyle birleşiminden doğan üst formları
+   bilinen tariflerden (seed/havuz) takip eder. [{name, emoji, have}] döner. */
+function evolveChain(name, max = 6) {
+	const cur0 = getElement(name);
+	const chain = [{ name: cur0 ? cur0.name : name, emoji: cur0 ? cur0.emoji : "✨", have: !!cur0 }];
+	const seen = new Set([norm(name)]);
+	let cur = chain[0].name;
+	for (let i = 0; i < max; i++) {
+		const r = lookupRecipe(comboKey([cur, cur]));
+		if (!r || !r.name || seen.has(norm(r.name))) break;
+		seen.add(norm(r.name));
+		chain.push({ name: r.name, emoji: r.emoji || "✨", have: !!getElement(r.name) });
+		cur = r.name;
+	}
+	return chain;
+}
 
 /* ---------- Hedef görevi ---------- */
 
@@ -495,6 +513,10 @@ async function combine(names) {
 
 		const stats = Store.stats;
 		stats.combos += 1;
+		// Evrim (#5): aynı elementin kendisiyle birleşimi (X+X[+X]) bir "evrim" sayılır.
+		if (namesC.length >= 2 && namesC.every((n) => norm(n) === norm(namesC[0]))) {
+			stats.evolves = (stats.evolves || 0) + 1;
+		}
 
 		let discovered = false;
 		const els = Store.elements;
