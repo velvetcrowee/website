@@ -1,0 +1,343 @@
+:root {
+	--bg: #0f172a;
+	--card: #1e293b;
+	--card-2: #273548;
+	--text: #e2e8f0;
+	--muted: #94a3b8;
+	--accent: #f59e0b;
+	--accent-dark: #d97706;
+	--danger: #f87171;
+	--gone: #334155;
+	--radius: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+
+body {
+	font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	background: var(--bg);
+	color: var(--text);
+	-webkit-tap-highlight-color: transparent;
+	min-height: 100dvh;
+}
+
+/* ─── Kurulum & Tamamlandı overlay ─── */
+#setup-overlay, #done-overlay {
+	position: fixed;
+	inset: 0;
+	background: var(--bg);
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	overflow-y: auto;
+}
+.setup-card {
+	background: var(--card);
+	border-radius: var(--radius);
+	padding: 24px 20px;
+	width: 100%;
+	max-width: 480px;
+}
+.setup-card h1 { font-size: 1.4rem; color: var(--accent); margin-bottom: 8px; }
+.setup-card h2 { font-size: 1.2rem; margin-bottom: 8px; }
+
+.field { flex: 1; }
+.field-label {
+	display: block;
+	font-size: 0.75rem;
+	color: var(--muted);
+	margin-bottom: 4px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+}
+
+.error-msg { color: var(--danger); font-size: 0.88rem; margin-bottom: 8px; }
+
+/* ─── Ana uygulama kabuğu ─── */
+#app {
+	display: flex;
+	flex-direction: column;
+	min-height: 100dvh;
+	padding-bottom: 76px;
+}
+
+.app-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 14px 16px;
+	position: sticky;
+	top: 0;
+	background: rgba(15, 23, 42, 0.92);
+	backdrop-filter: blur(6px);
+	z-index: 10;
+}
+.app-header h1 { font-size: 1.1rem; color: var(--accent); }
+.app-header span { color: var(--muted); font-size: 0.85rem; }
+
+main { padding: 0 12px 12px; max-width: 480px; margin: 0 auto; width: 100%; }
+
+.tab { display: none; padding-top: 12px; }
+.tab.active { display: block; animation: fadein 0.18s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+/* ─── Kartlar ─── */
+.card {
+	background: var(--card);
+	border-radius: var(--radius);
+	padding: 16px;
+	margin-bottom: 12px;
+}
+.card-title {
+	font-size: 0.75rem;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 1px;
+	margin-bottom: 10px;
+}
+.muted { color: var(--muted); font-size: 0.85rem; }
+
+/* ─── Timer ─── */
+.timer-card { text-align: center; }
+
+.timer-wrap {
+	position: relative;
+	width: 180px;
+	height: 180px;
+	margin: 0 auto 16px;
+}
+.timer-svg { width: 180px; height: 180px; }
+.timer-center {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+.timer-big {
+	font-size: 2.4rem;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+	color: var(--accent);
+	line-height: 1;
+}
+.timer-label { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
+
+.current-pair-info { margin-bottom: 14px; }
+.current-pair-names { font-size: 1.1rem; font-weight: 700; margin-bottom: 4px; }
+.current-pair-pos { font-size: 0.82rem; color: var(--muted); }
+.cycle-badge {
+	display: inline-block;
+	background: var(--accent-dark);
+	color: white;
+	border-radius: 999px;
+	padding: 2px 10px;
+	font-size: 0.72rem;
+	font-weight: 700;
+	margin-left: 6px;
+	vertical-align: middle;
+}
+
+/* ─── ETA chip ─── */
+.eta-card {
+	background: rgba(245, 158, 11, 0.1);
+	border: 1px solid rgba(245, 158, 11, 0.35);
+	padding: 12px 16px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.eta-icon { font-size: 1.5rem; line-height: 1; }
+.eta-text { flex: 1; }
+.eta-title { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.eta-value { font-size: 1.05rem; font-weight: 700; color: var(--accent); margin-top: 2px; }
+
+/* ─── Sıra listesi ─── */
+.pair-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 0;
+	border-bottom: 1px solid #2c3a4f;
+}
+.pair-row:last-child { border-bottom: none; }
+
+.pair-pos {
+	background: var(--card-2);
+	border-radius: 8px;
+	padding: 4px 10px;
+	font-size: 0.8rem;
+	color: var(--muted);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+.pair-names { flex: 1; font-weight: 600; font-size: 0.9rem; }
+.pair-eta { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+
+.pair-row.watched {
+	background: rgba(245, 158, 11, 0.08);
+	border-radius: 8px;
+	padding-left: 10px;
+	border-left: 3px solid var(--accent);
+	border-bottom: none;
+	margin: 4px 0;
+}
+.pair-row.watched + .pair-row { border-top: 1px solid #2c3a4f; }
+.pair-row.watched .pair-pos { background: rgba(245, 158, 11, 0.18); color: var(--accent); }
+
+.pair-row.gone .pair-names { text-decoration: line-through; color: var(--muted); }
+.pair-row.gone .pair-pos { opacity: 0.5; }
+
+/* ─── Makine grid ─── */
+.machine-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.machine-chip {
+	flex: 0 0 auto;
+	min-width: 54px;
+	background: var(--card-2);
+	border: 2px solid transparent;
+	border-radius: 10px;
+	padding: 10px 8px;
+	font-size: 0.95rem;
+	font-weight: 700;
+	text-align: center;
+	cursor: pointer;
+	color: var(--text);
+	transition: border-color 0.15s, opacity 0.15s;
+	-webkit-tap-highlight-color: transparent;
+}
+.machine-chip:active { transform: scale(0.92); }
+.machine-chip.current-machine { border-color: var(--accent); }
+.machine-chip.gone {
+	opacity: 0.35;
+	text-decoration: line-through;
+	background: var(--gone);
+	color: var(--muted);
+	border-color: transparent;
+}
+
+/* ─── Geçmiş ─── */
+.history-item {
+	background: var(--card);
+	border-radius: var(--radius);
+	padding: 12px 16px;
+	margin-bottom: 10px;
+}
+.history-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 4px;
+}
+.history-names { font-weight: 700; font-size: 0.95rem; }
+.history-dur { font-size: 0.82rem; color: var(--accent); font-weight: 700; }
+.history-meta { font-size: 0.78rem; color: var(--muted); }
+
+/* ─── Form elemanları ─── */
+input, select {
+	width: 100%;
+	background: var(--card-2);
+	border: 1px solid #334155;
+	color: var(--text);
+	border-radius: 10px;
+	padding: 11px 12px;
+	font-size: 1rem;
+	margin-bottom: 8px;
+}
+input:focus, select:focus { outline: 2px solid var(--accent-dark); }
+
+.btn {
+	background: var(--card-2);
+	color: var(--text);
+	border: none;
+	border-radius: 10px;
+	padding: 12px 16px;
+	font-size: 0.95rem;
+	font-weight: 600;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: scale(0.98); }
+.btn.primary { background: var(--accent-dark); color: white; }
+.btn.danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+.btn.full { width: 100%; margin-bottom: 10px; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+
+.row { display: flex; gap: 8px; align-items: flex-start; }
+.row span { padding: 12px 4px; white-space: nowrap; }
+
+/* ─── Kurulum — ikili isim inputları ─── */
+.pair-input-group { margin-bottom: 14px; }
+.pair-input-label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.75rem;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 1px;
+	margin-bottom: 6px;
+}
+.watched-tag {
+	background: rgba(245, 158, 11, 0.2);
+	color: var(--accent);
+	border-radius: 999px;
+	padding: 1px 8px;
+	font-size: 0.68rem;
+}
+.pair-name-row { display: flex; gap: 8px; }
+.pair-name-row input { margin-bottom: 0; }
+
+/* ─── Alt nav ─── */
+.bottom-nav {
+	position: fixed;
+	bottom: 0; left: 0; right: 0;
+	display: flex;
+	background: #0b1222;
+	border-top: 1px solid #1e293b;
+	padding-bottom: env(safe-area-inset-bottom);
+	z-index: 10;
+}
+.nav-btn {
+	flex: 1;
+	background: none;
+	border: none;
+	color: var(--muted);
+	font-size: 0.68rem;
+	padding: 8px 0 10px;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	-webkit-tap-highlight-color: transparent;
+}
+.nav-btn span { font-size: 1.25rem; }
+.nav-btn.active { color: var(--accent); }
+
+/* ─── Toast ─── */
+#toast {
+	position: fixed;
+	bottom: 86px;
+	left: 50%;
+	transform: translateX(-50%);
+	background: #334155;
+	color: white;
+	padding: 10px 18px;
+	border-radius: 999px;
+	font-size: 0.88rem;
+	z-index: 50;
+	max-width: 90%;
+	text-align: center;
+}
+
+/* ─── Tamamlandı overlay ─── */
+#done-overlay { background: rgba(15, 23, 42, 0.97); }
+.done-icon { font-size: 3rem; text-align: center; margin-bottom: 12px; }

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+	<meta name="theme-color" content="#0f172a">
+	<title>Liman Rotasyon Takibi</title>
+	<link rel="manifest" href="manifest.webmanifest">
+	<link rel="icon" href="icons/icon-192.png">
+	<link rel="apple-touch-icon" href="icons/icon-192.png">
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+	<!-- ─── Kurulum ekranı (başlangıçta görünür) ─── -->
+	<div id="setup-overlay">
+		<div class="setup-card">
+			<h1>⚓ Liman Rotasyon</h1>
+			<p class="muted" style="margin-bottom: 16px">
+				Tahliye edilen makinelerin pozisyon aralığını ve çalışan isimlerini girin.
+			</p>
+
+			<div class="row" style="margin-bottom: 8px">
+				<div class="field">
+					<label class="field-label" for="start-pos">Başlangıç Poz.</label>
+					<input type="number" id="start-pos" value="4" min="1" max="98">
+				</div>
+				<div class="field">
+					<label class="field-label" for="end-pos">Bitiş Poz.</label>
+					<input type="number" id="end-pos" value="11" min="2" max="99">
+				</div>
+			</div>
+
+			<div id="pair-names"></div>
+
+			<p id="setup-error" class="error-msg" hidden></p>
+
+			<button id="btn-start" class="btn primary full">Oturumu Başlat</button>
+		</div>
+	</div>
+
+	<!-- ─── Ana uygulama (başlangıçta gizli) ─── -->
+	<div id="app" hidden>
+		<header class="app-header">
+			<h1>⚓ Liman Rotasyon</h1>
+			<span id="header-cycle"></span>
+		</header>
+
+		<main id="main">
+
+			<!-- ANA EKRAN -->
+			<section id="tab-ana" class="tab active">
+
+				<div class="card timer-card">
+					<div class="timer-wrap">
+						<svg class="timer-svg" viewBox="0 0 200 200" aria-hidden="true">
+							<circle cx="100" cy="100" r="85" fill="none" stroke="var(--card-2)" stroke-width="12"/>
+							<circle id="timer-ring" cx="100" cy="100" r="85" fill="none"
+								stroke="var(--accent)" stroke-width="12" stroke-linecap="round"
+								stroke-dasharray="534" stroke-dashoffset="0"
+								transform="rotate(-90 100 100)"/>
+						</svg>
+						<div class="timer-center">
+							<div id="timer-display" class="timer-big">30:00</div>
+							<div class="timer-label">kalan süre</div>
+						</div>
+					</div>
+
+					<div id="current-pair-info" class="current-pair-info"></div>
+
+					<button id="btn-advance" class="btn full">Sıradakine Geç →</button>
+				</div>
+
+				<!-- İzlenen çift ETA -->
+				<div id="eta-chip" class="card eta-card" hidden></div>
+
+				<!-- Sıra listesi -->
+				<div class="card">
+					<div class="card-title">Sıradakiler</div>
+					<div id="queue-list"></div>
+				</div>
+
+				<!-- Makine durumu -->
+				<div class="card">
+					<div class="card-title">Makine Durumu</div>
+					<p class="muted" style="margin-bottom: 10px; font-size: 0.8rem">
+						Yüklemeye geçen makinelere dokunun
+					</p>
+					<div id="machine-grid" class="machine-grid"></div>
+				</div>
+
+			</section>
+
+			<!-- GEÇMİŞ -->
+			<section id="tab-gecmis" class="tab">
+				<div id="history-list"></div>
+				<p id="no-history" class="muted" style="text-align:center; padding: 40px 0">
+					Henüz tamamlanan tur yok.
+				</p>
+			</section>
+
+			<!-- AYARLAR -->
+			<section id="tab-ayarlar" class="tab">
+				<div class="card">
+					<h2 style="margin-bottom: 10px">Tur Süresi</h2>
+					<div class="row">
+						<input type="number" id="duration-input" value="30" min="1" max="120">
+						<span class="muted">dakika</span>
+					</div>
+					<button id="btn-save-settings" class="btn primary full">Kaydet</button>
+				</div>
+				<div class="card">
+					<h2 style="margin-bottom: 10px">Oturum</h2>
+					<button id="btn-new-session" class="btn full">🔄 Yeni Oturum Başlat</button>
+					<button id="btn-reset-all" class="btn danger full">Tüm Verileri Sil</button>
+				</div>
+			</section>
+
+		</main>
+
+		<nav class="bottom-nav">
+			<button data-tab="tab-ana" class="nav-btn active"><span>⏱️</span>Ana</button>
+			<button data-tab="tab-gecmis" class="nav-btn"><span>📋</span>Geçmiş</button>
+			<button data-tab="tab-ayarlar" class="nav-btn"><span>⚙️</span>Ayarlar</button>
+		</nav>
+	</div>
+
+	<!-- ─── Oturum tamamlandı overlay ─── -->
+	<div id="done-overlay" hidden>
+		<div class="setup-card" style="text-align: center">
+			<div class="done-icon">⚓</div>
+			<h2 style="margin-bottom: 8px">Oturum Tamamlandı</h2>
+			<p class="muted" style="margin-bottom: 20px">Tüm makineler yüklemeye geçti.</p>
+			<button id="btn-done-new" class="btn primary full">Yeni Oturum Başlat</button>
+		</div>
+	</div>
+
+	<div id="toast" hidden></div>
+
+	<script src="data.js"></script>
+	<script src="app.js"></script>
+</body>
+</html>

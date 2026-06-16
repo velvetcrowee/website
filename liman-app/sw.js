@@ -1,12 +1,11 @@
-/* Çevrimdışı destek: uygulama kabuğunu önbelleğe alır; API istekleri ağa gider. */
+/* Çevrimdışı destek: uygulama kabuğunu önbelleğe alır. */
 
-const CACHE = "fittakip-v6";
+const CACHE = "liman-v1";
 const ASSETS = [
 	"./",
 	"./index.html",
 	"./styles.css",
 	"./app.js",
-	"./ai.js",
 	"./data.js",
 	"./manifest.webmanifest",
 	"./icons/icon-192.png",
@@ -27,11 +26,7 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
 	const url = new URL(e.request.url);
-	// API istekleri ve diğer origin'ler her zaman ağa gider.
 	if (url.origin !== location.origin) return;
-	// Diğer uygulamalar kendi service worker'larını kullanır; bu kapsam dışı kalsın.
-	if (url.pathname.includes("/element-simyasi/")) return;
-	if (url.pathname.includes("/liman-app/")) return;
 	e.respondWith(
 		caches.match(e.request).then((cached) =>
 			cached ||
