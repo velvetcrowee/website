@@ -271,7 +271,7 @@ async function imageConcept(env, name) {
 /* İngilizce, BİREBİR/temsili prompt: kavramın kendisini net ve tanınır biçimde
    çizer (sevimli maskot/karakter değil). */
 function imagePrompt(concept) {
-	return `a clear detailed digital illustration that literally depicts ${concept}, realistic and recognizable, centered game icon art, clean simple background, vibrant colors, no cute mascot, no character face, no text, no letters, no words`;
+	return `a realistic detailed photo-like depiction of ${concept} as a real object, material, place or natural phenomenon, show the thing itself, NOT a creature, not a monster, not a character, no face, no eyes, no mascot, no anthropomorphism, centered, clean plain background, sharp, no text, no letters, no words`;
 }
 function pollinationsUrl(name, prompt) {
 	const seed = imgHash(norm(name));
