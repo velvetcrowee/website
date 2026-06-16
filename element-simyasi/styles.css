@@ -187,6 +187,14 @@ body {
 @keyframes pulse { 50% { box-shadow: 0 0 14px rgba(167, 139, 250, 0.8); } }
 /* Sabitlenmiş (favori) elementler altın kenarlı görünür ve listede en üstte. */
 .chip.pinned { border-color: var(--gold); }
+/* Nadirlik (#5): sol kenarda renkli ince şerit. .pinned'den SONRA tanımlı ki
+   favori altın kenarına rağmen nadirlik görünür kalsın (border-left-color longhand). */
+.chip { border-left-width: 3px; }
+.chip.rar-common { border-left-color: #475569; }
+.chip.rar-uncommon { border-left-color: #34d399; }
+.chip.rar-rare { border-left-color: #60a5fa; }
+.chip.rar-epic { border-left-color: #a78bfa; }
+.chip.rar-legendary { border-left-color: #fbbf24; box-shadow: 0 0 7px rgba(251, 191, 36, 0.4); }
 .chip-star {
 	font-size: 0.85rem;
 	line-height: 1;
@@ -273,6 +281,24 @@ body {
 .btn:active { transform: scale(0.97); }
 .btn.icon { padding: 8px 10px; font-size: 1rem; }
 .btn.icon.active { background: var(--accent-dark); color: #fff; }
+
+/* Başlık seviye rozeti (#12). */
+.level-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex-shrink: 0;
+	background: var(--card-2);
+	border: 1px solid #334155;
+	color: var(--text);
+	border-radius: 999px;
+	padding: 3px 8px;
+	font-size: 0.72rem;
+	cursor: pointer;
+}
+.level-pill b { color: var(--gold); font-weight: 700; white-space: nowrap; }
+.level-pill .lvl-bar { width: 34px; height: 5px; background: #0f172a; border-radius: 99px; overflow: hidden; }
+.level-pill .lvl-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-dark), var(--accent)); }
 .btn.primary { background: var(--accent-dark); color: white; }
 .btn.danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
 .btn.full { width: 100%; margin-bottom: 10px; }

@@ -105,6 +105,7 @@ function announceResult(res) {
 	}
 	if (!res.discovered) { sfx("merge"); return; }
 	checkCollections();
+	checkLevelUp();
 	if (res.isNew) {
 		toast(`🏆 İlk Keşif: ${res.emoji} ${res.name}`, "gold", 4500);
 		confetti();
@@ -136,6 +137,29 @@ function handleCombineError(err) {
 function renderCount() {
 	const n = Object.keys(Store.elements).length;
 	$("#element-count").textContent = `${n} element`;
+}
+
+/* Başlıktaki seviye rozeti + XP çubuğu (#12). */
+function renderLevel() {
+	const pill = $("#level-pill");
+	if (!pill) return;
+	const xp = playerXP();
+	const li = levelInfo(xp);
+	pill.hidden = false;
+	pill.innerHTML = `<b>${t("levelLabel")} ${li.level}</b><span class="lvl-bar"><span style="width:${Math.round(li.progress * 100)}%"></span></span>`;
+	pill.title = `${xp} XP · ${li.into}/${li.span}`;
+}
+
+/* Keşiften sonra seviye atlandıysa kutla (#12). */
+function checkLevelUp() {
+	const s = Store.stats;
+	const lvl = playerLevel();
+	if (!s.level) { s.level = lvl; Store.stats = s; }
+	else if (lvl > s.level) {
+		s.level = lvl; Store.stats = s;
+		setTimeout(() => { toast(`🎉 ${t("levelUp")} ${t("levelLabel")} ${lvl}`, "gold", 4000); confetti(); sfx("badge"); }, 400);
+	}
+	renderLevel();
 }
 
 /* Aktif kategori filtresi ("" = tümü). */
@@ -186,7 +210,7 @@ function createChip(e) {
 
 function updateChip(chip, e) {
 	const fav = isFavorite(e.name);
-	const cls = "chip" + (freshNames.has(norm(e.name)) ? " fresh" : "") + (fav ? " pinned" : "");
+	const cls = "chip rar-" + rarityOf(e).id + (freshNames.has(norm(e.name)) ? " fresh" : "") + (fav ? " pinned" : "");
 	if (chip.className !== cls) chip.className = cls;
 	if (chip.dataset.name !== e.name) chip.dataset.name = e.name;
 	// textContent kullanılır: ayrıca kaçış (escape) gerekmez, parse maliyeti yok.
@@ -225,6 +249,7 @@ function renderChips() {
 		if (!seen.has(key)) { node.remove(); chipNodes.delete(key); }
 	}
 	renderCount();
+	renderLevel();
 	renderCatFilter();
 }
 
@@ -657,6 +682,9 @@ $("#quest-hint").addEventListener("click", () => {
 
 /* ---------- Başlık butonları ---------- */
 
+// Seviye rozetine dokununca Keşif Defteri açılır (XP/istatistikler orada).
+$("#level-pill").addEventListener("click", () => $("#btn-book").click());
+
 $("#btn-clear").addEventListener("click", () => {
 	wsItems = [];
 	Store.workspace = [];
@@ -737,6 +765,7 @@ $("#btn-book").addEventListener("click", () => {
 	const worldFirsts = Object.values(Store.elements).filter((e) => e.firstBy && e.firstBy === me).length;
 	// "dünya ilki" değeri liderlik tablosu yüklenince kesinleşir (id ile güncellenir).
 	$("#book-stats").innerHTML = `
+		<div class="stat"><b>${t("levelLabel")} ${playerLevel()}</b><span>${t("statLevel")}</span></div>
 		<div class="stat"><b>${stats.discoveries}</b><span>${t("statElement")}</span></div>
 		<div class="stat"><b id="stat-firsts">${worldFirsts}</b><span>${t("statFirst")}</span></div>
 		<div class="stat"><b>${stats.combos}</b><span>${t("statCombo")}</span></div>
@@ -1095,8 +1124,9 @@ function openDetail(name) {
 	const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 	const depth = elementDepth(e.name);
 	const cat = categoryInfo(elementCategory(e));
+	const rar = rarityOf(e);
 	$("#detail-meta").textContent =
-		`${cat.emoji} ${cat.name} · ${date} tarihinde keşfedildi · derinlik: ${depth}` + (e.firstDiscovery ? " · 🏆 İlk Keşif" : "");
+		`${rar.emoji} ${rarityName(rar.id)} · ${cat.emoji} ${cat.name} · ${date} tarihinde keşfedildi · derinlik: ${depth}` + (e.firstDiscovery ? " · 🏆 İlk Keşif" : "");
 	const lin = $("#detail-lineage");
 	lin.innerHTML = "";
 	const steps = lineageSteps(e.name);
