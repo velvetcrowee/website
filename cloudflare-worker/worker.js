@@ -268,9 +268,10 @@ async function imageConcept(env, name) {
 	} catch { /* çeviri olmadı → adın kendisi */ }
 	return name;
 }
-/* İngilizce, ikon-odaklı prompt: tek merkezi nesne, sade arka plan, yazısız. */
+/* İngilizce, BİREBİR/temsili prompt: kavramın kendisini net ve tanınır biçimde
+   çizer (sevimli maskot/karakter değil). */
 function imagePrompt(concept) {
-	return `cute flat sticker icon of ${concept}, single centered subject, bold vibrant colors, plain solid pastel background, minimalist, no text, no letters, digital illustration`;
+	return `a clear detailed digital illustration that literally depicts ${concept}, realistic and recognizable, centered game icon art, clean simple background, vibrant colors, no cute mascot, no character face, no text, no letters, no words`;
 }
 function pollinationsUrl(name, prompt) {
 	const seed = imgHash(norm(name));
