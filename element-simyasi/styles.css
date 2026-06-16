@@ -127,6 +127,39 @@ body {
 	background: rgba(124, 58, 237, 0.18);
 }
 
+/* Panel araçları: sıralama (#17) + favori klasör butonu (#21). */
+#panel-tools { display: flex; gap: 6px; align-items: center; }
+#sort-select {
+	flex: 1; min-width: 0;
+	background: var(--card-2);
+	border: 1px solid #334155;
+	color: var(--text);
+	border-radius: 10px;
+	padding: 7px 10px;
+	font-size: 0.82rem;
+}
+#sort-select:focus { outline: 2px solid var(--accent-dark); }
+
+#folder-bar { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
+.folder-chip {
+	flex-shrink: 0;
+	background: var(--card-2);
+	border: 1px solid #334155;
+	border-radius: 999px;
+	color: var(--muted);
+	padding: 5px 10px;
+	font-size: 0.78rem;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.folder-chip.active { border-color: var(--gold); color: var(--text); background: rgba(251, 191, 36, 0.14); }
+.folder-row {
+	display: flex; align-items: center; justify-content: space-between; gap: 8px;
+	padding: 7px 4px; border-bottom: 1px solid #1e293b; font-size: 0.9rem;
+}
+.folder-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-row select { background: var(--card-2); border: 1px solid #334155; color: var(--text); border-radius: 8px; padding: 5px 8px; max-width: 50%; }
+
 #quest-bar {
 	position: absolute;
 	top: 10px;
@@ -187,6 +220,14 @@ body {
 @keyframes pulse { 50% { box-shadow: 0 0 14px rgba(167, 139, 250, 0.8); } }
 /* Sabitlenmiş (favori) elementler altın kenarlı görünür ve listede en üstte. */
 .chip.pinned { border-color: var(--gold); }
+/* Nadirlik (#5): sol kenarda renkli ince şerit. .pinned'den SONRA tanımlı ki
+   favori altın kenarına rağmen nadirlik görünür kalsın (border-left-color longhand). */
+.chip { border-left-width: 3px; }
+.chip.rar-common { border-left-color: #475569; }
+.chip.rar-uncommon { border-left-color: #34d399; }
+.chip.rar-rare { border-left-color: #60a5fa; }
+.chip.rar-epic { border-left-color: #a78bfa; }
+.chip.rar-legendary { border-left-color: #fbbf24; box-shadow: 0 0 7px rgba(251, 191, 36, 0.4); }
 .chip-star {
 	font-size: 0.85rem;
 	line-height: 1;
@@ -241,8 +282,10 @@ body {
 /* ---------- Birleştirme çubuğu (panelde, masaüstü + mobil) ---------- */
 
 #combiner { display: flex; align-items: center; gap: 6px; }
-#combiner .slot {
+#slot-row { flex: 1; display: flex; align-items: center; gap: 4px; min-width: 0; }
+#combiner .slot, #slot-row .slot {
 	flex: 1;
+	min-width: 0;
 	background: var(--card-2);
 	border: 1px dashed #475569;
 	border-radius: 10px;
@@ -254,9 +297,23 @@ body {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-#combiner .slot.filled { border-style: solid; border-color: var(--accent); }
-#combiner .slot.result { border-color: var(--gold); }
-#combiner .op { color: var(--muted); font-weight: 700; }
+#combiner .slot.filled, #slot-row .slot.filled { border-style: solid; border-color: var(--accent); }
+#combiner .slot.result { flex: 1; border-color: var(--gold); }
+#combiner .op, #slot-row .op { color: var(--muted); font-weight: 700; flex-shrink: 0; }
+/* ➕ slot ekle + = birleştir butonları (#4). */
+.slot-add, .op-go {
+	flex-shrink: 0;
+	background: var(--card-2);
+	border: 1px solid #334155;
+	color: var(--text);
+	border-radius: 10px;
+	padding: 9px 8px;
+	font-size: 0.85rem;
+	font-weight: 700;
+	cursor: pointer;
+}
+.op-go { color: var(--muted); }
+.slot-add:active, .op-go:active { transform: scale(0.95); }
 
 /* ---------- Butonlar ---------- */
 
@@ -273,6 +330,24 @@ body {
 .btn:active { transform: scale(0.97); }
 .btn.icon { padding: 8px 10px; font-size: 1rem; }
 .btn.icon.active { background: var(--accent-dark); color: #fff; }
+
+/* Başlık seviye rozeti (#12). */
+.level-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex-shrink: 0;
+	background: var(--card-2);
+	border: 1px solid #334155;
+	color: var(--text);
+	border-radius: 999px;
+	padding: 3px 8px;
+	font-size: 0.72rem;
+	cursor: pointer;
+}
+.level-pill b { color: var(--gold); font-weight: 700; white-space: nowrap; }
+.level-pill .lvl-bar { width: 34px; height: 5px; background: #0f172a; border-radius: 99px; overflow: hidden; }
+.level-pill .lvl-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-dark), var(--accent)); }
 .btn.primary { background: var(--accent-dark); color: white; }
 .btn.danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
 .btn.full { width: 100%; margin-bottom: 10px; }
@@ -640,3 +715,45 @@ details.manual-entry[open] summary { margin-bottom: 6px; }
 
 /* Chip listesinin esnek kapsayıcıda düzgün kayması için. */
 #chip-list { min-height: 0; }
+
+/* ---------- Günün Elementi (#3) ---------- */
+.daily-card {
+	background: linear-gradient(135deg, rgba(124, 58, 237, 0.18), rgba(251, 191, 36, 0.1));
+	border: 1px solid var(--accent-dark);
+	border-radius: var(--radius);
+	padding: 10px 12px;
+	margin-bottom: 10px;
+}
+.daily-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 0.9rem; }
+.daily-streak { color: var(--gold); font-size: 0.8rem; }
+.daily-target { display: flex; align-items: center; gap: 10px; }
+.daily-emoji { font-size: 1.6rem; }
+.daily-name { flex: 1; font-weight: 600; }
+.daily-status { font-size: 0.8rem; color: var(--muted); }
+.daily-target.done .daily-status { color: #34d399; font-weight: 600; }
+.daily-target.done .daily-name { text-decoration: line-through; color: var(--muted); }
+
+/* Defter butonunda "yeni günlük hedef" noktası. */
+.btn.icon.has-dot { position: relative; }
+.btn.icon.has-dot::after {
+	content: ""; position: absolute; top: 4px; right: 4px;
+	width: 8px; height: 8px; border-radius: 50%;
+	background: var(--gold); box-shadow: 0 0 5px var(--gold);
+}
+
+/* ---------- Yeni oyuncu tanıtımı (#22) ---------- */
+.tut-overlay {
+	position: fixed; inset: 0; z-index: 300;
+	display: flex; align-items: center; justify-content: center;
+	background: rgba(15, 23, 42, 0.85); padding: 20px;
+}
+.tut-card {
+	background: var(--card); border: 1px solid #334155;
+	border-radius: var(--radius); padding: 20px; max-width: 360px; width: 100%;
+}
+.tut-card h2 { font-size: 1.15rem; margin-bottom: 10px; color: var(--accent); }
+.tut-card p { color: var(--text); line-height: 1.5; }
+.tut-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 18px; }
+#tut-dots { display: flex; gap: 6px; }
+#tut-dots i { width: 7px; height: 7px; border-radius: 50%; background: #334155; }
+#tut-dots i.on { background: var(--accent); }

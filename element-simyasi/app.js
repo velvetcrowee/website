@@ -105,6 +105,8 @@ function announceResult(res) {
 	}
 	if (!res.discovered) { sfx("merge"); return; }
 	checkCollections();
+	checkLevelUp();
+	checkDaily(res);
 	if (res.isNew) {
 		toast(`🏆 İlk Keşif: ${res.emoji} ${res.name}`, "gold", 4500);
 		confetti();
@@ -138,6 +140,66 @@ function renderCount() {
 	$("#element-count").textContent = `${n} element`;
 }
 
+/* Başlıktaki seviye rozeti + XP çubuğu (#12). */
+function renderLevel() {
+	const pill = $("#level-pill");
+	if (!pill) return;
+	const xp = playerXP();
+	const li = levelInfo(xp);
+	pill.hidden = false;
+	pill.innerHTML = `<b>${t("levelLabel")} ${li.level}</b><span class="lvl-bar"><span style="width:${Math.round(li.progress * 100)}%"></span></span>`;
+	pill.title = `${xp} XP · ${li.into}/${li.span}`;
+}
+
+/* ---------- Günün Elementi (#3) ---------- */
+
+function renderDaily() {
+	const box = $("#daily-card");
+	if (!box) return;
+	const tgt = dailyTarget();
+	const have = !!getElement(tgt.name);
+	const streak = dailyState().streak || 0;
+	const streakHtml = streak > 0 ? `<span class="daily-streak">🔥 ${streak} ${t("dailyStreak")}</span>` : "";
+	box.innerHTML = `
+		<div class="daily-head"><b>${t("dailyTitle")}</b>${streakHtml}</div>
+		<div class="daily-target${have ? " done" : ""}">
+			<span class="daily-emoji">${tgt.emoji}</span>
+			<span class="daily-name">${escapeHtml(tgt.name)}</span>
+			<span class="daily-status">${have ? t("dailyFoundLabel") : t("dailyGoal")}</span>
+		</div>`;
+}
+
+function renderDailyDot() {
+	const btn = $("#btn-book");
+	if (btn) btn.classList.toggle("has-dot", !dailyDoneToday());
+}
+
+/* Keşfedilen element o günün hedefiyse seriyi artır + kutla. */
+function checkDaily(res) {
+	if (norm(res.name) !== norm(dailyTarget().name)) return;
+	if (dailyDoneToday()) return;
+	const d = dailyState();
+	const yest = dateStr(Date.now() - 86400000);
+	d.streak = (d.doneDate === yest) ? (d.streak || 0) + 1 : 1;
+	d.doneDate = dailyKey();
+	DB.write("daily", d);
+	setTimeout(() => { toast(`🗓️ ${t("dailyDone")} 🔥${d.streak}`, "gold", 5000); confetti(); sfx("first"); }, 700);
+	renderDailyDot();
+	if (!$("#modal-book").hidden) renderDaily();
+}
+
+/* Keşiften sonra seviye atlandıysa kutla (#12). */
+function checkLevelUp() {
+	const s = Store.stats;
+	const lvl = playerLevel();
+	if (!s.level) { s.level = lvl; Store.stats = s; }
+	else if (lvl > s.level) {
+		s.level = lvl; Store.stats = s;
+		setTimeout(() => { toast(`🎉 ${t("levelUp")} ${t("levelLabel")} ${lvl}`, "gold", 4000); confetti(); sfx("badge"); }, 400);
+	}
+	renderLevel();
+}
+
 /* Aktif kategori filtresi ("" = tümü). */
 let activeCat = "";
 
@@ -166,6 +228,99 @@ $("#cat-filter").addEventListener("click", (ev) => {
 	renderChips();
 });
 
+/* ---------- Sıralama (#17) ---------- */
+
+// "" = filtre yok · "*" = tüm favoriler · <id> = belirli klasör.
+let activeFolder = "";
+
+function sortChipList(list, mode) {
+	if (mode === "name") list.sort((a, b) => a.name.localeCompare(b.name, "tr"));
+	else if (mode === "rarity") list.sort((a, b) => rarityRank(b) - rarityRank(a) || new Date(b.discoveredAt) - new Date(a.discoveredAt));
+	else if (mode === "depth") list.sort((a, b) => depthOf(b.name) - depthOf(a.name) || a.name.localeCompare(b.name, "tr"));
+	else if (mode === "cat") list.sort((a, b) => {
+		const ca = elementCategory(a), cb = elementCategory(b);
+		return ca === cb ? a.name.localeCompare(b.name, "tr") : ca.localeCompare(cb);
+	});
+}
+
+$("#sort-select").addEventListener("change", (e) => { Store.sortMode = e.target.value; renderChips(); });
+
+/* ---------- Favori klasörleri (#21) ---------- */
+
+function renderFolderBar() {
+	const bar = $("#folder-bar");
+	const folders = Store.folders;
+	const favCount = Store.favorites.length;
+	if (!folders.length && !favCount) { bar.hidden = true; bar.innerHTML = ""; return; }
+	bar.hidden = false;
+	const map = Store.elemFolders;
+	const chips = [`<button class="folder-chip${activeFolder === "" ? " active" : ""}" data-folder="">${t("all")}</button>`];
+	chips.push(`<button class="folder-chip${activeFolder === "*" ? " active" : ""}" data-folder="*">${t("allFavorites")} (${favCount})</button>`);
+	for (const f of folders) {
+		const c = Object.values(map).filter((id) => id === f.id).length;
+		chips.push(`<button class="folder-chip${activeFolder === f.id ? " active" : ""}" data-folder="${f.id}">${f.emoji} ${escapeHtml(f.name)} (${c})</button>`);
+	}
+	bar.innerHTML = chips.join("");
+}
+
+$("#folder-bar").addEventListener("click", (ev) => {
+	const b = ev.target.closest(".folder-chip");
+	if (!b) return;
+	activeFolder = b.dataset.folder;
+	renderFolderBar();
+	renderChips();
+});
+
+function openFolders() {
+	renderFolderList();
+	renderFolderAssign();
+	$("#modal-folders").hidden = false;
+}
+$("#btn-folders").addEventListener("click", openFolders);
+
+$("#folder-add").addEventListener("click", () => {
+	const name = $("#folder-name").value.trim();
+	if (!name) return;
+	addFolder(name);
+	$("#folder-name").value = "";
+	renderFolderList(); renderFolderAssign(); renderFolderBar();
+});
+
+function renderFolderList() {
+	const box = $("#folder-list");
+	const folders = Store.folders;
+	box.innerHTML = folders.map((f) =>
+		`<div class="folder-row"><span>${f.emoji} ${escapeHtml(f.name)}</span><button class="del" data-del="${f.id}">${t("deleteFolder")}</button></div>`
+	).join("");
+}
+
+$("#folder-list").addEventListener("click", (ev) => {
+	const b = ev.target.closest("[data-del]");
+	if (!b) return;
+	deleteFolder(b.dataset.del);
+	if (activeFolder === b.dataset.del) activeFolder = "";
+	renderFolderList(); renderFolderAssign(); renderFolderBar(); renderChips();
+});
+
+function renderFolderAssign() {
+	const box = $("#folder-assign");
+	const favs = Store.favorites.map((k) => getElement(k)).filter(Boolean);
+	if (!favs.length) { box.innerHTML = `<p class="muted">${t("noFavorites")}</p>`; return; }
+	const folders = Store.folders;
+	const opts = (sel) => `<option value="">${t("noFolder")}</option>` +
+		folders.map((f) => `<option value="${f.id}"${sel === f.id ? " selected" : ""}>${f.emoji} ${escapeHtml(f.name)}</option>`).join("");
+	box.innerHTML = favs.map((e) =>
+		`<div class="folder-row"><span>${e.emoji} ${escapeHtml(e.name)}</span><select data-elem="${escapeHtml(e.name)}">${opts(elemFolder(e.name))}</select></div>`
+	).join("");
+}
+
+$("#folder-assign").addEventListener("change", (ev) => {
+	const sel = ev.target.closest("select[data-elem]");
+	if (!sel) return;
+	setElemFolder(sel.dataset.elem, sel.value);
+	renderFolderBar();
+});
+
 /* Anahtarlı (keyed) artımlı render: tüm listeyi sıfırdan kurmak yerine var olan
    chip düğümlerini yeniden kullanır, yalnızca değişenleri günceller ve sırayı
    yerinde düzeltir. Favori sabitleme, birleştirme ve havuz tazelemesi gibi sık
@@ -186,7 +341,7 @@ function createChip(e) {
 
 function updateChip(chip, e) {
 	const fav = isFavorite(e.name);
-	const cls = "chip" + (freshNames.has(norm(e.name)) ? " fresh" : "") + (fav ? " pinned" : "");
+	const cls = "chip rar-" + rarityOf(e).id + (freshNames.has(norm(e.name)) ? " fresh" : "") + (fav ? " pinned" : "");
 	if (chip.className !== cls) chip.className = cls;
 	if (chip.dataset.name !== e.name) chip.dataset.name = e.name;
 	// textContent kullanılır: ayrıca kaçış (escape) gerekmez, parse maliyeti yok.
@@ -203,9 +358,14 @@ function renderChips() {
 	const list = elementList()
 		.filter((e) => !q || norm(e.name).includes(q))
 		.filter((e) => !activeCat || elementCategory(e) === activeCat)
-		// Favoriler her zaman en üstte (sabitlenmiş) görünür. sort kararlıdır:
-		// grup içinde keşif sırası (yenilik) korunur.
-		.sort((a, b) => (isFavorite(b.name) ? 1 : 0) - (isFavorite(a.name) ? 1 : 0));
+		.filter((e) => !activeFolder || (activeFolder === "*" ? isFavorite(e.name) : elemFolder(e.name) === activeFolder));
+	const mode = Store.sortMode;
+	if (mode === "recent") {
+		// En yeni (varsayılan): keşif sırası + favoriler en üstte (kararlı sort).
+		list.sort((a, b) => (isFavorite(b.name) ? 1 : 0) - (isFavorite(a.name) ? 1 : 0));
+	} else {
+		sortChipList(list, mode);
+	}
 
 	const seen = new Set();
 	let prev = null;
@@ -225,7 +385,9 @@ function renderChips() {
 		if (!seen.has(key)) { node.remove(); chipNodes.delete(key); }
 	}
 	renderCount();
+	renderLevel();
 	renderCatFilter();
+	renderFolderBar();
 }
 
 /* Yıldıza tıklayınca elementi favorile/çıkar (sürüklemeyi başlatmaz). */
@@ -309,7 +471,7 @@ async function mergeItems(idA, idB) {
 	elB?.classList.add("pending");
 	elA && (elA.firstChild.textContent = "⏳");
 	try {
-		const res = await combine(a.name, b.name);
+		const res = await combine([a.name, b.name]);
 		const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
 		removeWsItem(idA);
 		removeWsItem(idB);
@@ -524,20 +686,24 @@ function isOverPanel(ev) {
    Tıklama → sağdaki çubukta birleştir (tuvale getirmeye gerek yok).
    Sürükleme → tuvale ekle veya başka chip'in üstüne bırakıp birleştir. */
 
-const slots = { a: "", b: "" };
+/* Çoklu birleştirme (#4): 2-4 elementlik dinamik tepsi. ➕ ile slot eklenir;
+   2 slotta otomatik birleşir (hızlı yol), 3-4 slotta = (Birleştir) ile. */
+let slots = [];       // doldurulmuş element adları
+let maxSlots = 2;     // 2..4
+let slotResult = "";  // sonuç adı
 
 function chipTapped(name) {
-	if ($("#slot-result").dataset.name) clearSlots(); // önceki sonuçtan sonra yeni tur
-	if (!slots.a) slots.a = name;
-	else if (!slots.b) slots.b = name;
-	else { clearSlots(); slots.a = name; }
+	if (slotResult) clearSlots(); // önceki sonuçtan sonra yeni tur
+	if (slots.length >= maxSlots) slots[maxSlots - 1] = name; // dolu: son slotu değiştir
+	else slots.push(name);
 	renderSlots();
-	if (slots.a && slots.b) combineSlots();
+	if (maxSlots === 2 && slots.length === 2) combineNow();
 }
 
 function clearSlots() {
-	slots.a = slots.b = "";
-	$("#slot-result").dataset.name = "";
+	slots = [];
+	maxSlots = 2;
+	slotResult = "";
 	renderSlots();
 }
 
@@ -547,40 +713,50 @@ function slotLabel(name) {
 }
 
 function renderSlots() {
-	$("#slot-a").textContent = slotLabel(slots.a);
-	$("#slot-a").classList.toggle("filled", !!slots.a);
-	$("#slot-b").textContent = slotLabel(slots.b);
-	$("#slot-b").classList.toggle("filled", !!slots.b);
-	const resName = $("#slot-result").dataset.name;
-	$("#slot-result").textContent = resName ? slotLabel(resName) : "?";
+	const row = $("#slot-row");
+	let html = "";
+	for (let i = 0; i < maxSlots; i++) {
+		const nm = slots[i] || "";
+		html += `<button class="slot${nm ? " filled" : ""}" data-i="${i}">${escapeHtml(nm ? slotLabel(nm) : t("slotPick"))}</button>`;
+		if (i < maxSlots - 1) html += `<span class="op">+</span>`;
+	}
+	row.innerHTML = html;
+	$("#slot-add").hidden = maxSlots >= 4;
+	const resEl = $("#slot-result");
+	resEl.dataset.name = slotResult;
+	resEl.textContent = slotResult ? slotLabel(slotResult) : "?";
 }
 
-async function combineSlots() {
+async function combineNow() {
+	if (slots.length < 2) return;
+	const names = [...slots];
 	$("#slot-result").textContent = "⏳";
 	try {
-		const res = await combine(slots.a, slots.b);
-		$("#slot-result").dataset.name = res.name;
+		const res = await combine(names);
+		slotResult = res.name;
 		renderSlots();
 		announceResult(res);
 		renderChips();
 	} catch (err) {
-		$("#slot-result").textContent = "?";
+		slotResult = "";
+		renderSlots();
 		handleCombineError(err);
 	}
 }
 
-/* Bir chip'i başka chip'in üstüne bırakınca doğrudan birleştir (panelde,
-   tuvale getirmeden). Sonuç çubukta da gösterilir. */
+/* Bir chip'i başka chip'in üstüne bırakınca doğrudan birleştir (2 element). */
 async function combineByNames(nameA, nameB) {
-	slots.a = nameA; slots.b = nameB;
+	slots = [nameA, nameB];
+	maxSlots = 2;
+	slotResult = "";
 	renderSlots();
-	await combineSlots();
+	await combineNow();
 }
 
 /* Panelden bir chip'i tuvaldeki öğenin üstüne bırakınca tuvalde birleştir. */
 async function combineDroppedOnCanvas(nameA, nameB, pos) {
 	try {
-		const res = await combine(nameA, nameB);
+		const res = await combine([nameA, nameB]);
 		addWsItem(res.name, pos.x, pos.y, true);
 		announceResult(res);
 		renderChips();
@@ -589,13 +765,19 @@ async function combineDroppedOnCanvas(nameA, nameB, pos) {
 	}
 }
 
-$("#slot-a").addEventListener("click", () => { slots.a = ""; $("#slot-result").dataset.name = ""; renderSlots(); });
-$("#slot-b").addEventListener("click", () => { slots.b = ""; $("#slot-result").dataset.name = ""; renderSlots(); });
+// Slot'a dokununca o slotu temizle (dolu slotları kaldırır).
+$("#slot-row").addEventListener("click", (ev) => {
+	const b = ev.target.closest(".slot");
+	if (!b) return;
+	const i = +b.dataset.i;
+	if (slots[i] !== undefined) { slots.splice(i, 1); slotResult = ""; renderSlots(); }
+});
+$("#slot-add").addEventListener("click", () => { if (maxSlots < 4) { maxSlots++; renderSlots(); } });
+$("#slot-go").addEventListener("click", combineNow);
 $("#slot-result").addEventListener("click", () => {
-	const name = $("#slot-result").dataset.name;
-	if (!name) return;
+	if (!slotResult) return;
 	const r = workspaceEl.getBoundingClientRect();
-	addWsItem(name, r.width / 2 - 40, r.height / 2 - 18, true);
+	addWsItem(slotResult, r.width / 2 - 40, r.height / 2 - 18, true);
 	clearSlots();
 });
 
@@ -656,6 +838,9 @@ $("#quest-hint").addEventListener("click", () => {
 });
 
 /* ---------- Başlık butonları ---------- */
+
+// Seviye rozetine dokununca Keşif Defteri açılır (XP/istatistikler orada).
+$("#level-pill").addEventListener("click", () => $("#btn-book").click());
 
 $("#btn-clear").addEventListener("click", () => {
 	wsItems = [];
@@ -737,6 +922,7 @@ $("#btn-book").addEventListener("click", () => {
 	const worldFirsts = Object.values(Store.elements).filter((e) => e.firstBy && e.firstBy === me).length;
 	// "dünya ilki" değeri liderlik tablosu yüklenince kesinleşir (id ile güncellenir).
 	$("#book-stats").innerHTML = `
+		<div class="stat"><b>${t("levelLabel")} ${playerLevel()}</b><span>${t("statLevel")}</span></div>
 		<div class="stat"><b>${stats.discoveries}</b><span>${t("statElement")}</span></div>
 		<div class="stat"><b id="stat-firsts">${worldFirsts}</b><span>${t("statFirst")}</span></div>
 		<div class="stat"><b>${stats.combos}</b><span>${t("statCombo")}</span></div>
@@ -753,6 +939,7 @@ $("#btn-book").addEventListener("click", () => {
 
 	// Modal hemen açılsın; ağır liste ve liderlik sonraki kareye ertelenir.
 	$("#modal-book").hidden = false;
+	renderDaily();
 	requestAnimationFrame(() => {
 		renderBookReset();
 		renderWorldStats();
@@ -761,6 +948,24 @@ $("#btn-book").addEventListener("click", () => {
 		renderActivityFeed();
 	});
 });
+
+/* ---------- Yeni oyuncu tanıtımı (#22) ---------- */
+
+const TUT_STEPS = ["tut1", "tut2", "tut3", "tut4"];
+let tutIdx = 0;
+function renderTut() {
+	const k = TUT_STEPS[tutIdx];
+	$("#tut-body").innerHTML = `<h2>${t(k + "Title")}</h2><p>${t(k + "Body")}</p>`;
+	$("#tut-dots").innerHTML = TUT_STEPS.map((_, i) => `<i class="${i === tutIdx ? "on" : ""}"></i>`).join("");
+	$("#tut-next").textContent = tutIdx === TUT_STEPS.length - 1 ? t("tutDone") : t("tutNext");
+}
+function showTutorial() { tutIdx = 0; renderTut(); $("#tutorial").hidden = false; }
+function endTutorial() { $("#tutorial").hidden = true; DB.write("tutorialDone", true); }
+$("#tut-next").addEventListener("click", () => {
+	if (tutIdx < TUT_STEPS.length - 1) { tutIdx++; renderTut(); } else endTutorial();
+});
+$("#tut-skip").addEventListener("click", endTutorial);
+$("#btn-tutorial").addEventListener("click", () => { $("#modal-settings").hidden = true; showTutorial(); });
 
 /* Keşif listesi sayfalı yüklenir: çok büyük koleksiyonlarda binlerce DOM düğümü
    tek seferde basmaz; "Daha fazla göster" ile parça parça eklenir. */
@@ -784,7 +989,7 @@ function renderBookMore() {
 		const li = document.createElement("li");
 		li.dataset.name = e.name;
 		const date = new Date(e.discoveredAt).toLocaleDateString(loc, { day: "numeric", month: "long" });
-		const from = e.fromPair ? `${e.fromPair[0]} + ${e.fromPair[1]}` : t("startEl2");
+		const from = e.fromPair ? e.fromPair.join(" + ") : t("startEl2");
 		const first = e.firstBy ? ` <span class="first-tag">🥇 ${escapeHtml(e.firstBy)}</span>` : "";
 		li.innerHTML = `<span>${e.emoji}</span><span>${escapeHtml(e.name)}${e.firstDiscovery ? " 🏆" : ""}${first}</span>
 			<span class="sub">${escapeHtml(from)} — ${date}</span>`;
@@ -1022,8 +1227,7 @@ function lineageSteps(name, seen = new Set(), out = []) {
 	if (!e || !e.fromPair || seen.has(norm(name)) || out.length >= 30) return out;
 	seen.add(norm(name));
 	out.push(e);
-	lineageSteps(e.fromPair[0], seen, out);
-	lineageSteps(e.fromPair[1], seen, out);
+	e.fromPair.forEach((n) => lineageSteps(n, seen, out)); // 2-4 üye (#4)
 	return out;
 }
 
@@ -1056,7 +1260,7 @@ function renderDetailImage() {
 async function loadDescLazy(e) {
 	const poolUrl = activePoolUrl();
 	if (!poolUrl || !e.fromPair) return;
-	const key = pairKey(e.fromPair[0], e.fromPair[1]);
+	const key = comboKey(e.fromPair);
 	try {
 		const res = await fetch(poolUrl + "/recipe?key=" + encodeURIComponent(key));
 		if (!res.ok) return;
@@ -1095,8 +1299,9 @@ function openDetail(name) {
 	const date = new Date(e.discoveredAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 	const depth = elementDepth(e.name);
 	const cat = categoryInfo(elementCategory(e));
+	const rar = rarityOf(e);
 	$("#detail-meta").textContent =
-		`${cat.emoji} ${cat.name} · ${date} tarihinde keşfedildi · derinlik: ${depth}` + (e.firstDiscovery ? " · 🏆 İlk Keşif" : "");
+		`${rar.emoji} ${rarityName(rar.id)} · ${cat.emoji} ${cat.name} · ${date} tarihinde keşfedildi · derinlik: ${depth}` + (e.firstDiscovery ? " · 🏆 İlk Keşif" : "");
 	const lin = $("#detail-lineage");
 	lin.innerHTML = "";
 	const steps = lineageSteps(e.name);
@@ -1106,7 +1311,7 @@ function openDetail(name) {
 		steps.forEach((s) => {
 			const li = document.createElement("li");
 			li.dataset.name = s.name;
-			li.innerHTML = `<span>${fmtEl(s.name)}</span><span class="sub">${fmtEl(s.fromPair[0])} + ${fmtEl(s.fromPair[1])}</span>`;
+			li.innerHTML = `<span>${fmtEl(s.name)}</span><span class="sub">${s.fromPair.map(fmtEl).join(" + ")}</span>`;
 			lin.appendChild(li);
 		});
 	}
@@ -1438,8 +1643,12 @@ async function init() {
 	}
 
 	renderWorkspace();
+	$("#sort-select").value = Store.sortMode;
 	renderChips();
 	renderSlots();
+	renderDailyDot();
+	// İlk açılışta tanıtım (#22) — temel elementler serpiştirildikten sonra.
+	if (!DB.read("tutorialDone", false)) setTimeout(showTutorial, 650);
 
 	// Giriş yapıldıysa açılışta bulut ilerlemesini çek ve birleştir; sonra
 	// yerel ilerlemeyi de geri kaydet (iki yönlü senkron / ilk yükleme).

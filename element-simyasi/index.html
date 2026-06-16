@@ -13,6 +13,7 @@
 <body>
 	<header class="app-header">
 		<h1 data-i18n="title">🧪 Element Simyası</h1>
+		<button id="level-pill" class="level-pill" hidden title=""></button>
 		<span id="element-count"></span>
 		<div class="header-btns">
 			<button id="btn-lucky" class="btn icon" data-i18n-title="lucky" title="Şanslı birleştirme">🎲</button>
@@ -33,15 +34,25 @@
 		</div>
 		<div id="vsplit" title="Sürükle: tuval/panel oranını ayarla"><span class="vsplit-grip"></span></div>
 		<aside id="panel">
-			<!-- Mobil birleştirme çubuğu: [A] + [B] = [?] -->
+			<!-- Birleştirme tepsisi: [A] + [B] (+ …) = [?]  (2-4 element, #4) -->
 			<div id="combiner">
-				<button id="slot-a" class="slot" data-name="">＋ Seç</button>
-				<span class="op">+</span>
-				<button id="slot-b" class="slot" data-name="">＋ Seç</button>
-				<span class="op">=</span>
+				<div id="slot-row"></div>
+				<button id="slot-add" class="slot-add" data-i18n-title="addSlot" title="Element ekle">➕</button>
+				<button id="slot-go" class="op-go" data-i18n-title="combineBtn" title="Birleştir">=</button>
 				<button id="slot-result" class="slot result" data-name="">?</button>
 			</div>
 			<input type="search" id="search" data-i18n-ph="search" placeholder="🔍 Ara…" autocomplete="off">
+			<div id="panel-tools">
+				<select id="sort-select" title="Sırala">
+					<option value="recent" data-i18n="sortRecent">En yeni</option>
+					<option value="name" data-i18n="sortName">İsim (A-Z)</option>
+					<option value="rarity" data-i18n="sortRarity">Nadirlik</option>
+					<option value="depth" data-i18n="sortDepth">Derinlik</option>
+					<option value="cat" data-i18n="sortCat">Kategori</option>
+				</select>
+				<button id="btn-folders" class="btn icon" data-i18n-title="folders" title="Favori klasörleri">🗂️</button>
+			</div>
+			<div id="folder-bar"></div>
 			<div id="cat-filter"></div>
 			<div id="chip-list"></div>
 		</aside>
@@ -54,6 +65,7 @@
 				<h2 data-i18n="bookTitle">📖 Keşif Defteri</h2>
 				<button class="del modal-close">✕</button>
 			</div>
+			<div id="daily-card" class="daily-card"></div>
 			<div id="book-stats" class="stats-row"></div>
 			<h3 data-i18n="worldStats">📊 Dünya İstatistikleri</h3>
 			<div id="world-stats"></div>
@@ -100,6 +112,24 @@
 				<button class="del modal-close">✕</button>
 			</div>
 			<div id="profile-body"></div>
+		</div>
+	</div>
+
+	<!-- Favori klasörleri (#21) -->
+	<div id="modal-folders" class="modal" hidden>
+		<div class="modal-card">
+			<div class="row-between">
+				<h2 data-i18n="foldersTitle">🗂️ Favori Klasörleri</h2>
+				<button class="del modal-close">✕</button>
+			</div>
+			<p class="muted" data-i18n="foldersHint">Favori elementlerini klasörlere ayırıp panelde gruplandır.</p>
+			<div class="row">
+				<input type="text" id="folder-name" maxlength="20" data-i18n-ph="folderName" placeholder="Klasör adı">
+				<button id="folder-add" class="btn primary" data-i18n="addFolder">Ekle</button>
+			</div>
+			<div id="folder-list"></div>
+			<h3 data-i18n="assignTitle">Elementleri klasörle</h3>
+			<div id="folder-assign"></div>
 		</div>
 	</div>
 
@@ -164,6 +194,7 @@
 				<option value="en">English</option>
 			</select>
 			<label class="check-row"><input type="checkbox" id="sound-toggle" checked> <span data-i18n="soundFx">Ses efektleri</span></label>
+			<button id="btn-tutorial" class="btn full" data-i18n="replayTutorial">📖 Tanıtımı tekrar göster</button>
 			<h3 data-i18n="dataHeading">Veriler & Oyun Belleği</h3>
 			<p id="memory-info" class="muted"></p>
 			<button id="btn-export" class="btn full" data-i18n="exportData">📤 Verileri dışa aktar (JSON)</button>
@@ -173,6 +204,18 @@
 			<button id="btn-export-train" class="btn full" data-i18n="exportTrain">🧠 Eğitim verisini dışa aktar (JSONL)</button>
 			<p class="muted">Eğitim verisi, oyunun öğrendiği tüm tarifleri yapay zekâ ince ayarına (fine-tuning) hazır sohbet biçiminde dışa aktarır.</p>
 			<button id="btn-reset" class="btn danger full" data-i18n="resetAll">Tüm verileri sıfırla</button>
+		</div>
+	</div>
+
+	<!-- Yeni oyuncu tanıtımı (#22) -->
+	<div id="tutorial" class="tut-overlay" hidden>
+		<div class="tut-card">
+			<div id="tut-body"></div>
+			<div class="tut-nav">
+				<button id="tut-skip" class="btn" data-i18n="tutSkip">Geç</button>
+				<span id="tut-dots"></span>
+				<button id="tut-next" class="btn primary" data-i18n="tutNext">İleri</button>
+			</div>
 		</div>
 	</div>
 
@@ -187,6 +230,7 @@
 	<script src="seed.js"></script>
 	<script src="ai.js"></script>
 	<script src="game.js"></script>
+	<script src="progression.js"></script>
 	<script src="app.js"></script>
 </body>
 </html>

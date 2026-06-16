@@ -353,7 +353,8 @@ function elementDepth(name, seen = new Set()) {
 	const e = getElement(name);
 	if (!e || !e.fromPair || seen.has(norm(name))) return 0;
 	seen.add(norm(name));
-	return 1 + Math.max(elementDepth(e.fromPair[0], seen), elementDepth(e.fromPair[1], seen));
+	// fromPair 2-4 üyeli olabilir (#4 çoklu birleştirme).
+	return 1 + Math.max(0, ...e.fromPair.map((n) => elementDepth(n, seen)));
 }
 
 /* ---------- Rozetler ---------- */
@@ -398,6 +399,54 @@ function currentQuest() {
 	return q;
 }
 
+/* ---------- Günün Elementi (#3) ----------
+   Tarihten DETERMİNİSTİK seçilir → o gün herkeste AYNI hedef. Sabit bir küratör
+   listesinden (DAILY_POOL) günün indeksi hesaplanır; oyuncu bulunca seri (streak)
+   artar. Hedef, ilgi çekici ve ulaşılabilir orta-seviye elementlerden seçilir. */
+const DAILY_POOL = [
+	{ name: "Buhar", emoji: "🌫️" }, { name: "Bulut", emoji: "☁️" }, { name: "Yağmur", emoji: "🌧️" },
+	{ name: "Şimşek", emoji: "⚡" }, { name: "Fırtına", emoji: "⛈️" }, { name: "Gökkuşağı", emoji: "🌈" },
+	{ name: "Kar", emoji: "❄️" }, { name: "Buz", emoji: "🧊" }, { name: "Volkan", emoji: "🌋" },
+	{ name: "Lav", emoji: "🌋" }, { name: "Deniz", emoji: "🌊" }, { name: "Okyanus", emoji: "🌊" },
+	{ name: "Dağ", emoji: "⛰️" }, { name: "Çöl", emoji: "🏜️" }, { name: "Ada", emoji: "🏝️" },
+	{ name: "Ağaç", emoji: "🌳" }, { name: "Orman", emoji: "🌲" }, { name: "Çiçek", emoji: "🌸" },
+	{ name: "Balık", emoji: "🐟" }, { name: "Kuş", emoji: "🐦" }, { name: "Kelebek", emoji: "🦋" },
+	{ name: "İnsan", emoji: "🧑" }, { name: "Şehir", emoji: "🏙️" }, { name: "Kale", emoji: "🏰" },
+	{ name: "Robot", emoji: "🤖" }, { name: "Bilgisayar", emoji: "💻" }, { name: "İnternet", emoji: "🌐" },
+	{ name: "Yapay Zekâ", emoji: "🤖" }, { name: "Roket", emoji: "🚀" }, { name: "Astronot", emoji: "👨‍🚀" },
+	{ name: "Gezegen", emoji: "🪐" }, { name: "Yıldız", emoji: "⭐" }, { name: "Galaksi", emoji: "🌌" },
+	{ name: "Karadelik", emoji: "🕳️" }, { name: "Güneş", emoji: "☀️" }, { name: "Ay", emoji: "🌙" },
+	{ name: "Ejderha", emoji: "🐉" }, { name: "Anka Kuşu", emoji: "🔥" }, { name: "Deniz Kızı", emoji: "🧜‍♀️" },
+	{ name: "Tek Boynuz", emoji: "🦄" }, { name: "Büyücü", emoji: "🧙" }, { name: "Şövalye", emoji: "⚔️" },
+	{ name: "Kılıç", emoji: "🗡️" }, { name: "Kral", emoji: "👑" }, { name: "Hazine", emoji: "💰" },
+	{ name: "Ekmek", emoji: "🍞" }, { name: "Peynir", emoji: "🧀" }, { name: "Kebap", emoji: "🍢" },
+	{ name: "Bal", emoji: "🍯" }, { name: "Çay", emoji: "🍵" }, { name: "Müzik", emoji: "🎵" },
+	{ name: "Film", emoji: "🎬" }, { name: "Sinema", emoji: "🎬" }, { name: "Kitap", emoji: "📖" },
+	{ name: "Resim", emoji: "🖼️" }, { name: "Dans", emoji: "💃" }, { name: "Aşk", emoji: "❤️" },
+	{ name: "Mutluluk", emoji: "😊" }, { name: "Rüya", emoji: "💭" }, { name: "Bilgelik", emoji: "🦉" },
+	{ name: "Metal", emoji: "🔩" }, { name: "Çelik", emoji: "🔩" }, { name: "Cam", emoji: "🪟" },
+	{ name: "Elektrik", emoji: "⚡" }, { name: "Atom", emoji: "⚛️" }, { name: "DNA", emoji: "🧬" },
+	{ name: "Teleskop", emoji: "🔭" }, { name: "Araba", emoji: "🚗" }, { name: "Uçak", emoji: "✈️" },
+	{ name: "Gemi", emoji: "🚢" }, { name: "Tuğla", emoji: "🧱" }, { name: "Ev", emoji: "🏠" },
+];
+
+function dateStr(ms) {
+	const d = new Date(ms);
+	return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function dailyKey() { return dateStr(Date.now()); }
+function dailyHash(s) {
+	let h = 2166136261;
+	for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+	return h >>> 0;
+}
+/* O günün hedefi (herkeste aynı). */
+function dailyTarget() {
+	return DAILY_POOL[dailyHash(dailyKey()) % DAILY_POOL.length];
+}
+function dailyState() { return DB.read("daily", { doneDate: "", streak: 0 }); }
+function dailyDoneToday() { return dailyState().doneDate === dailyKey(); }
+
 /* Yeni kazanılan rozetleri kaydedip döndürür. */
 function checkBadges(ctx) {
 	const earned = Store.badges;
@@ -412,14 +461,15 @@ function checkBadges(ctx) {
 	return fresh;
 }
 
-/* İki elementi birleştirir.
+/* 2-4 elementi birleştirir (#4 çoklu birleştirme). Tek dizi argüman alır.
    Dönüş: { name, emoji, isNew, discovered } — discovered: oyuncu için yeni mi. */
-async function combine(nameA, nameB) {
-	const a = getElement(nameA);
-	const b = getElement(nameB);
-	if (!a || !b) throw new Error("Bilinmeyen element.");
+async function combine(names) {
+	const list = (Array.isArray(names) ? names : [names]).slice(0, 4);
+	const elsIn = list.map(getElement);
+	if (elsIn.length < 2 || elsIn.some((e) => !e)) throw new Error("Bilinmeyen element.");
+	const namesC = elsIn.map((e) => e.name);
 
-	const key = pairKey(nameA, nameB);
+	const key = comboKey(namesC);
 	if (inFlight.has(key)) throw new Error("BUSY");
 	inFlight.add(key);
 	try {
@@ -430,7 +480,7 @@ async function combine(nameA, nameB) {
 		let result = lookupRecipe(key);
 		if (!result) {
 			// Yalnızca gerçek yapay zekâ çağrıları sıraya alınır.
-			result = validateResult(await enqueueAi(() => aiCombine(a, b)));
+			result = validateResult(await enqueueAi(() => aiCombine(elsIn)));
 			// Havuz ilk keşfeden bilgisini döndürmediyse (kendi anahtarıyla
 			// üreten oyuncu), iyimser olarak bu oyuncuyu ilk keşfeden say.
 			if (!result.by) { result.by = getNickname(); result.at = new Date().toISOString(); }
@@ -455,7 +505,7 @@ async function combine(nameA, nameB) {
 				cat: result.cat || CATEGORY_MAP[norm(result.name)] || "diger",
 				discoveredAt: new Date().toISOString(),
 				firstDiscovery: !!result.isNew,
-				fromPair: [a.name, b.name],
+				fromPair: namesC,
 				// Dünyada ilk keşfeden (havuzdan ya da bu oyuncu) ve tarihi.
 				firstBy: result.by || "",
 				firstAt: result.at || "",
@@ -481,7 +531,7 @@ async function combine(nameA, nameB) {
 		// Oyunun belleğine yaz: her olay kaydedilir, oyun bu hafızayla gelişir.
 		logMemory({
 			at: new Date().toISOString(),
-			pair: [a.name, b.name],
+			pair: namesC,
 			result: result.name,
 			isNew: !!result.isNew,
 			discovered,
