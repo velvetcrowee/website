@@ -280,10 +280,16 @@ async function imageConcept(env, name, desc) {
 	return null;
 }
 /* İngilizce, BİREBİR/fotoğraf-odaklı prompt: kavramın kendisini gösterir
-   (yaratık/karakter/yazı değil). */
+   (yaratık/karakter/yazı değil). Yalnızca OLUMLU ifadeler kullanılır: Flux gibi
+   modeller "no creature/no text" gibi olumsuzları dikkate almaz, hatta tersini
+   yapabilir. "Natürmort fotoğraf / tek cansız nesne" pozitifi yaratıktan uzaklaştırır. */
 function imagePrompt(desc) {
-	return `a realistic, highly detailed, sharp image of ${desc}, the object material or scene itself, dramatic natural lighting, vivid colors, centered, clean simple background, no creature, no character, no face, no mascot, no people, no text, no words, no letters, no logo, no watermark`;
+	return `professional still-life photograph of ${desc}, a single real inanimate object or a natural landscape, realistic, highly detailed, sharp focus, soft studio lighting, plain neutral background`;
 }
+/* Görsel sürümü: prompt/üretim mantığı her değişince artır. Önbellek anahtarı
+   istemcinin gönderdiği ?v yerine BUNU kullanır → eski/takılı istemciler bile
+   güncel görseli alır (worker kendi sürümünü dayatır). */
+const IMG_VER = "7";
 function pollinationsUrl(name, prompt) {
 	const seed = imgHash(norm(name));
 	return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&seed=${seed}&nologo=true&model=flux`;
@@ -480,7 +486,12 @@ export default {
 			const name = String(url.searchParams.get("name") || "").trim().slice(0, 60);
 			if (!name) return json({ error: "name gerekli" }, 400);
 			const cache = caches.default;
-			const cacheKey = new Request(url.toString());
+			// Önbellek anahtarı istemcinin ?v'sini DEĞİL, worker'ın IMG_VER'ini kullanır
+			// → tüm istemciler (eski/takılı olsa da) aynı, güncel sürümü paylaşır.
+			const ck = new URL(url.origin + "/image");
+			ck.searchParams.set("name", name);
+			ck.searchParams.set("iv", IMG_VER);
+			const cacheKey = new Request(ck.toString());
 			const hit = await cache.match(cacheKey);
 			if (hit) return hit;
 
@@ -498,7 +509,7 @@ export default {
 			const concept = await imageConcept(env, name, desc);
 			const prompt = concept
 				? imagePrompt(concept)
-				: "an abstract colorful symbolic representation, vibrant, detailed, plain clean background, no text, no words, no letters";
+				: "professional still-life photograph of an abstract colorful glowing crystal object, realistic, highly detailed, soft studio lighting, plain neutral background";
 
 			let bytes = null, ctype = "image/jpeg";
 			// 1) Cloudflare Workers AI (Flux schnell) — base64 JPEG döner.
@@ -522,7 +533,9 @@ export default {
 
 			const headers = new Headers(CORS);
 			headers.set("content-type", ctype);
-			headers.set("Cache-Control", "public, max-age=31536000, immutable");
+			// Kısa tarayıcı önbelleği (immutable DEĞİL): yeni IMG_VER çıkınca görseller
+			// kendiliğinden tazelenir. Worker Cache API yine de üretimi tek sefere indirir.
+			headers.set("Cache-Control", "public, max-age=3600");
 			const resp = new Response(bytes, { status: 200, headers });
 			if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(cacheKey, resp.clone()));
 			return resp;
