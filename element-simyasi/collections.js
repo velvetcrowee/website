@@ -46,6 +46,56 @@ const COLLECTIONS = [
 		desc: "Mitlerin ve büyünün kahramanları.",
 		members: ["Ejderha", "Anka Kuşu", "Tek Boynuz", "Deniz Kızı", "Büyücü", "Şövalye", "Hayalet"],
 	},
+	{
+		id: "mineral", emoji: "🪨", name: "Yerin Derinlikleri",
+		desc: "Taştan lavla, yerin altından gelenler.",
+		members: ["Taş", "Kaya", "Kum", "Kül", "Lav", "Mağara", "Çöl", "Petrol"],
+	},
+	{
+		id: "mutfak", emoji: "🍽️", name: "Türk Mutfağı",
+		desc: "Sofranın baş tacı lezzetler.",
+		members: ["Ekmek", "Peynir", "Çay", "Bal", "Kebap", "Lahmacun", "Döner", "Yoğurt", "Ayran"],
+	},
+	{
+		id: "krallik", emoji: "🏰", name: "Krallık",
+		desc: "Kılıçtan kaleye, şövalyelerin çağı.",
+		members: ["Asker", "Kılıç", "Kale", "Kral", "Ordu", "Şövalye", "Hazine", "Efsanevi Kılıç"],
+	},
+	{
+		id: "kesif", emoji: "🚀", name: "Uzay Keşfi",
+		desc: "Yıldızlara uzanan yolculuk.",
+		members: ["Roket", "Astronot", "Uzay Gemisi", "Koloni", "Teleskop", "Gözlem", "Uzay Yolculuğu"],
+	},
+	{
+		id: "dijital", emoji: "💻", name: "Dijital Çağ",
+		desc: "Çipten yapay zekâya, bilgi devrimi.",
+		members: ["Bilgisayar", "İnternet", "Çip", "İşlemci", "Sosyal Medya", "E-Spor", "E-Ticaret", "Yapay Zekâ"],
+	},
+	{
+		id: "sanat", emoji: "🎨", name: "Sanat & Kültür",
+		desc: "İnsanlığın yaratıcı ruhu.",
+		members: ["Müzik", "Resim", "Sanat", "Film", "Sinema", "Kitap", "Şarkı", "Dans"],
+	},
+	{
+		id: "duygu", emoji: "💭", name: "Duygular",
+		desc: "Kalbin ve aklın derin halleri.",
+		members: ["Aşk", "Mutluluk", "Hüzün", "Korku", "Hayal", "Rüya", "Bilgelik", "Hatıra"],
+	},
+	{
+		id: "ulasim", emoji: "🚗", name: "Yollar & Araçlar",
+		desc: "Tekerlekten yelkene, hareket halinde.",
+		members: ["Araba", "Uçak", "Gemi", "Tekne", "Tekerlek", "Motor", "Yelkenli", "Trafik"],
+	},
+	{
+		id: "yaratik", emoji: "👹", name: "Mitik Yaratıklar",
+		desc: "Efsanelerin canavar ve ruhları.",
+		members: ["Ejderha", "Anka Kuşu", "Deniz Kızı", "Tek Boynuz", "Canavar", "Kurt Adam", "Hayalet", "Ruh"],
+	},
+	{
+		id: "bilim", emoji: "🔬", name: "Bilim Dünyası",
+		desc: "Atomdan teleskoba, evreni anlamak.",
+		members: ["Atom", "Molekül", "Bilim", "Elektrik", "Çelik", "Mercek", "Teleskop", "DNA"],
+	},
 ];
 
 /* Bir koleksiyonun ilerlemesi: { found, total, missing[], done }. */
