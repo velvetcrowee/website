@@ -300,8 +300,8 @@ body {
 #combiner .slot.filled, #slot-row .slot.filled { border-style: solid; border-color: var(--accent); }
 #combiner .slot.result { flex: 1; border-color: var(--gold); }
 #combiner .op, #slot-row .op { color: var(--muted); font-weight: 700; flex-shrink: 0; }
-/* ➕ slot ekle + = birleştir butonları (#4). */
-.slot-add, .op-go {
+/* ➕➖ slot yönetimi ve = birleştir butonları (#4). */
+.slot-remove, .slot-add, .op-go {
 	flex-shrink: 0;
 	background: var(--card-2);
 	border: 1px solid #334155;
@@ -313,7 +313,7 @@ body {
 	cursor: pointer;
 }
 .op-go { color: var(--muted); }
-.slot-add:active, .op-go:active { transform: scale(0.95); }
+.slot-remove:active, .slot-add:active, .op-go:active { transform: scale(0.95); }
 
 /* ---------- Butonlar ---------- */
 

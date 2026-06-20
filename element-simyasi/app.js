@@ -741,7 +741,9 @@ function renderSlots() {
 		if (i < maxSlots - 1) html += `<span class="op">+</span>`;
 	}
 	row.innerHTML = html;
-	$("#slot-add").hidden = maxSlots >= 4;
+	$("#slot-add").hidden = maxSlots >= 3;
+	const removeBtn = $("#slot-remove");
+	if (removeBtn) removeBtn.hidden = maxSlots <= 2;
 	const resEl = $("#slot-result");
 	resEl.dataset.name = slotResult;
 	resEl.textContent = slotResult ? slotLabel(slotResult) : "?";
@@ -797,7 +799,15 @@ $("#slot-row").addEventListener("click", (ev) => {
 	const i = +b.dataset.i;
 	if (slots[i] !== undefined) { slots.splice(i, 1); slotResult = ""; renderSlots(); }
 });
-$("#slot-add").addEventListener("click", () => { if (maxSlots < 4) { maxSlots++; renderSlots(); } });
+$("#slot-add").addEventListener("click", () => { if (maxSlots < 3) { maxSlots++; renderSlots(); } });
+$("#slot-remove").addEventListener("click", () => {
+	if (maxSlots > 2) {
+		maxSlots--;
+		slots.length = Math.min(slots.length, maxSlots);
+		slotResult = "";
+		renderSlots();
+	}
+});
 $("#slot-go").addEventListener("click", combineNow);
 $("#slot-result").addEventListener("click", () => {
 	if (!slotResult) return;

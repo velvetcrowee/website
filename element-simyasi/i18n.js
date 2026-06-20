@@ -80,7 +80,7 @@ const STRINGS = {
 		tut3Body: "Sağdaki panelde keşfettiklerini ara, kategoriye/nadirliğe göre sırala, yıldıza dokunup favorile ve klasörlere ayır.",
 		tut4Title: "📖 Hedefler & defter",
 		tut4Body: "Üstteki 📖 ile keşif defterini aç: günün elementi, seviyen, rozetler, koleksiyonlar ve dünya liderliği orada. Şimdi keşfe başla!",
-		addSlot: "Element ekle (çoklu birleştirme)", combineBtn: "Birleştir",
+		addSlot: "Element ekle (çoklu birleştirme)", removeSlot: "Slot azalt", combineBtn: "Birleştir",
 		evolve: "Evrimle",
 		multiHint: "💡 İpucu: 3-4 element birleştirmek için ➕'ya bas",
 		// Element detayı
@@ -193,7 +193,7 @@ const STRINGS = {
 		tut3Body: "Search your discoveries, sort by category/rarity, tap the star to favorite and organize into folders.",
 		tut4Title: "📖 Goals & log",
 		tut4Body: "Open the 📖 log on top: the element of the day, your level, badges, collections and world leaderboard live there. Now go explore!",
-		addSlot: "Add element (multi-combine)", combineBtn: "Combine",
+		addSlot: "Add element (multi-combine)", removeSlot: "Remove slot", combineBtn: "Combine",
 		evolve: "Evolve",
 		multiHint: "💡 Tip: tap ➕ to combine 3-4 elements",
 		lineage: "🌳 Family Tree",
