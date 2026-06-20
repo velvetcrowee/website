@@ -1258,6 +1258,27 @@ async function renderLeaderboard() {
 
 /* ---------- Element detayı: hikâye + soy ağacı ---------- */
 
+function buildTreeHtml(name, isRoot = false, depth = 0, maxDepth = 3) {
+	const e = getElement(name);
+	if (!e) return `<div class="tree-node${isRoot ? " is-root" : ""}"><button class="node-card" data-name="${escapeHtml(name)}"><span>❓</span> <span>${escapeHtml(name)}</span></button></div>`;
+	
+	const hasParents = e.fromPair && e.fromPair.length > 0 && depth < maxDepth;
+	let html = `<div class="tree-node${isRoot ? " is-root" : ""}">`;
+	html += `<button class="node-card${isRoot ? " root-node" : ""}" data-name="${escapeHtml(e.name)}">`;
+	html += `<span>${e.emoji}</span> <span>${escapeHtml(e.name)}</span>`;
+	html += `</button>`;
+	
+	if (hasParents) {
+		html += `<div class="node-parents">`;
+		e.fromPair.forEach((p) => {
+			html += buildTreeHtml(p, false, depth + 1, maxDepth);
+		});
+		html += `</div>`;
+	}
+	html += `</div>`;
+	return html;
+}
+
 function lineageSteps(name, seen = new Set(), out = []) {
 	const e = getElement(name);
 	if (!e || !e.fromPair || seen.has(norm(name)) || out.length >= 30) return out;
@@ -1340,9 +1361,26 @@ function openDetail(name) {
 		`${rar.emoji} ${rarityName(rar.id)} · ${cat.emoji} ${cat.name} · ${date} tarihinde keşfedildi · derinlik: ${depth}` + (e.firstDiscovery ? " · 🏆 İlk Keşif" : "");
 	const lin = $("#detail-lineage");
 	lin.innerHTML = "";
+	const treeBox = $("#detail-lineage-tree");
+	if (treeBox) {
+		treeBox.innerHTML = buildTreeHtml(e.name, true, 0, 3);
+	}
+	
+	// Reset to Tree View by default
+	const treeBtn = $("#btn-lineage-tree");
+	const listBtn = $("#btn-lineage-list");
+	if (treeBtn) treeBtn.classList.add("active");
+	if (listBtn) listBtn.classList.remove("active");
+	const treeContainer = $("#detail-lineage-tree-container");
+	if (treeContainer) treeContainer.hidden = false;
+	lin.hidden = true;
+
 	const steps = lineageSteps(e.name);
 	if (!steps.length) {
 		lin.innerHTML = "<li><span class='sub'>Bu bir başlangıç elementi — her şey onunla başladı.</span></li>";
+		if (treeBox) {
+			treeBox.innerHTML = `<div class="tree-node is-root"><button class="node-card root-node" data-name="${escapeHtml(e.name)}"><span>${e.emoji}</span> <span>${escapeHtml(e.name)}</span></button><p class="muted" style="margin-top: 8px; font-size: 0.8rem;">${t("startEl")}</p></div>`;
+		}
 	} else {
 		steps.forEach((s) => {
 			const li = document.createElement("li");
@@ -1426,6 +1464,29 @@ $("#detail-lineage").addEventListener("click", (ev) => {
 	const li = ev.target.closest("li[data-name]");
 	if (li) openDetail(li.dataset.name);
 });
+const treeContainer = $("#detail-lineage-tree-container");
+if (treeContainer) {
+	treeContainer.addEventListener("click", (ev) => {
+		const btn = ev.target.closest(".node-card");
+		if (btn && btn.dataset.name) openDetail(btn.dataset.name);
+	});
+}
+const treeBtn = $("#btn-lineage-tree");
+const listBtn = $("#btn-lineage-list");
+if (treeBtn && listBtn) {
+	treeBtn.addEventListener("click", () => {
+		treeBtn.classList.add("active");
+		listBtn.classList.remove("active");
+		if (treeContainer) treeContainer.hidden = false;
+		$("#detail-lineage").hidden = true;
+	});
+	listBtn.addEventListener("click", () => {
+		listBtn.classList.add("active");
+		treeBtn.classList.remove("active");
+		if (treeContainer) treeContainer.hidden = true;
+		$("#detail-lineage").hidden = false;
+	});
+}
 
 /* ---------- Ayarlar ---------- */
 
