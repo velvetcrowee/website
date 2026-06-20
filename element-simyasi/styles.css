@@ -281,8 +281,8 @@ body {
 
 /* ---------- Birleştirme çubuğu (panelde, masaüstü + mobil) ---------- */
 
-#combiner { display: flex; align-items: center; gap: 6px; }
-#slot-row { flex: 1; display: flex; align-items: center; gap: 4px; min-width: 0; }
+#combiner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 6px; padding: 8px 0; }
+#slot-row { flex: 0 0 100%; display: flex; align-items: center; gap: 4px; min-width: 0; }
 #combiner .slot, #slot-row .slot {
 	flex: 1;
 	min-width: 0;
