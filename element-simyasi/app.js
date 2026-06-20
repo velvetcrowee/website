@@ -722,7 +722,6 @@ function chipTapped(name) {
 
 function clearSlots() {
 	slots = [];
-	maxSlots = 2;
 	slotResult = "";
 	renderSlots();
 }
@@ -742,6 +741,7 @@ function renderSlots() {
 	}
 	row.innerHTML = html;
 	$("#slot-add").hidden = maxSlots >= 4;
+	$("#slot-remove").hidden = maxSlots <= 2;
 	const resEl = $("#slot-result");
 	resEl.dataset.name = slotResult;
 	resEl.textContent = slotResult ? slotLabel(slotResult) : "?";
@@ -798,6 +798,7 @@ $("#slot-row").addEventListener("click", (ev) => {
 	if (slots[i] !== undefined) { slots.splice(i, 1); slotResult = ""; renderSlots(); }
 });
 $("#slot-add").addEventListener("click", () => { if (maxSlots < 4) { maxSlots++; renderSlots(); } });
+$("#slot-remove").addEventListener("click", () => { if (maxSlots > 2) { maxSlots--; slots = slots.slice(0, maxSlots); slotResult = ""; renderSlots(); } });
 $("#slot-go").addEventListener("click", combineNow);
 $("#slot-result").addEventListener("click", () => {
 	if (!slotResult) return;
