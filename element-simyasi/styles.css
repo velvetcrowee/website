@@ -281,38 +281,68 @@ body {
 
 /* ---------- Birleştirme çubuğu (panelde, masaüstü + mobil) ---------- */
 
-#combiner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 6px; padding: 8px 0; }
-#slot-row { flex: 0 0 100%; display: flex; align-items: center; gap: 4px; min-width: 0; }
+#combiner {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	padding: 10px;
+	background: var(--card);
+	border: 1px solid #334155;
+	border-radius: 14px;
+}
+#slot-row {
+	flex: 0 0 100%;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+}
 #combiner .slot, #slot-row .slot {
 	flex: 1;
-	min-width: 0;
+	min-width: 60px;
 	background: var(--card-2);
-	border: 1px dashed #475569;
-	border-radius: 10px;
+	border: 2px dashed #475569;
+	border-radius: 12px;
 	color: var(--text);
-	padding: 9px 6px;
-	font-size: 0.85rem;
+	padding: 12px 6px;
+	font-size: 0.9rem;
+	font-weight: 600;
+	text-align: center;
 	cursor: pointer;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-#combiner .slot.filled, #slot-row .slot.filled { border-style: solid; border-color: var(--accent); }
-#combiner .slot.result { flex: 1; border-color: var(--gold); }
+#combiner .slot.filled, #slot-row .slot.filled { border-style: solid; border-color: var(--accent); background: #1e293b; }
+#combiner .slot.result {
+	flex: 1 1 100%;
+	border-style: solid;
+	border-color: var(--gold);
+	font-size: 1rem;
+	padding: 14px 8px;
+}
 #combiner .op, #slot-row .op { color: var(--muted); font-weight: 700; flex-shrink: 0; }
-/* ➕➖ slot yönetimi ve = birleştir butonları (#4). */
+/* ➖ slot azalt + ➕ slot ekle + = birleştir butonları (#4). */
 .slot-remove, .slot-add, .op-go {
 	flex-shrink: 0;
 	background: var(--card-2);
 	border: 1px solid #334155;
 	color: var(--text);
-	border-radius: 10px;
-	padding: 9px 8px;
-	font-size: 0.85rem;
+	border-radius: 12px;
+	padding: 12px 16px;
+	font-size: 1.05rem;
 	font-weight: 700;
 	cursor: pointer;
+	min-width: 48px;
+	min-height: 44px;
 }
-.op-go { color: var(--muted); }
+.op-go {
+	color: #fff;
+	background: var(--accent);
+	border-color: var(--accent);
+	flex: 1 1 auto;
+}
 .slot-remove:active, .slot-add:active, .op-go:active { transform: scale(0.95); }
 
 /* ---------- Butonlar ---------- */

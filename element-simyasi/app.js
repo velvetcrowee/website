@@ -707,7 +707,7 @@ function isOverPanel(ev) {
 /* Çoklu birleştirme (#4): 2-4 elementlik dinamik tepsi. ➕ ile slot eklenir;
    2 slotta otomatik birleşir (hızlı yol), 3-4 slotta = (Birleştir) ile. */
 let slots = [];       // doldurulmuş element adları
-let maxSlots = 2;     // 2..4
+let maxSlots = DB.read("maxSlots", 2);  // 2..4, tercih korunur
 let slotResult = "";  // sonuç adı
 
 function chipTapped(name) {
@@ -797,10 +797,11 @@ $("#slot-row").addEventListener("click", (ev) => {
 	const i = +b.dataset.i;
 	if (slots[i] !== undefined) { slots.splice(i, 1); slotResult = ""; renderSlots(); }
 });
-$("#slot-add").addEventListener("click", () => { if (maxSlots < 4) { maxSlots++; renderSlots(); } });
+$("#slot-add").addEventListener("click", () => { if (maxSlots < 4) { maxSlots++; DB.write("maxSlots", maxSlots); renderSlots(); } });
 $("#slot-remove").addEventListener("click", () => {
 	if (maxSlots > 2) {
 		maxSlots--;
+		DB.write("maxSlots", maxSlots);
 		slots.length = Math.min(slots.length, maxSlots);
 		slotResult = "";
 		renderSlots();
