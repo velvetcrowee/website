@@ -37,7 +37,7 @@
 			<!-- Birleştirme tepsisi: [A] + [B] (+ …) = [?]  (2-4 element, #4) -->
 			<div id="combiner">
 				<div id="slot-row"></div>
-				<button id="slot-remove" class="slot-add" title="Slot azalt" hidden>➖</button>
+				<button id="slot-remove" class="slot-remove" data-i18n-title="removeSlot" title="Slot azalt" hidden>➖</button>
 				<button id="slot-add" class="slot-add" data-i18n-title="addSlot" title="Element ekle">➕</button>
 				<button id="slot-go" class="op-go" data-i18n-title="combineBtn" title="Birleştir">=</button>
 				<button id="slot-result" class="slot result" data-name="">?</button>
@@ -104,8 +104,17 @@
 			</div>
 			<div id="detail-image-box"></div>
 			<button id="btn-gen-image" class="btn full" data-i18n="genImage">🎨 Görsel üret</button>
-			<h3 data-i18n="lineage">🌳 Soy Ağacı</h3>
-			<ul id="detail-lineage" class="item-list"></ul>
+			<div class="row-between" style="margin-top: 15px; margin-bottom: 8px;">
+				<h3 data-i18n="lineage" style="margin: 0;">🌳 Soy Ağacı</h3>
+				<div class="lineage-toggle-group">
+					<button id="btn-lineage-tree" class="btn-toggle active" data-i18n="treeView">Ağaç</button>
+					<button id="btn-lineage-list" class="btn-toggle" data-i18n="listView">Liste</button>
+				</div>
+			</div>
+			<div id="detail-lineage-tree-container" class="lineage-tree-container">
+				<div id="detail-lineage-tree"></div>
+			</div>
+			<ul id="detail-lineage" class="item-list" hidden></ul>
 		</div>
 	</div>
 

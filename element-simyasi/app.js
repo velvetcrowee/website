@@ -741,7 +741,8 @@ function renderSlots() {
 	}
 	row.innerHTML = html;
 	$("#slot-add").hidden = maxSlots >= 4;
-	$("#slot-remove").hidden = maxSlots <= 2;
+	const removeBtn = $("#slot-remove");
+	if (removeBtn) removeBtn.hidden = maxSlots <= 2;
 	const resEl = $("#slot-result");
 	resEl.dataset.name = slotResult;
 	resEl.textContent = slotResult ? slotLabel(slotResult) : "?";
@@ -772,7 +773,6 @@ async function combineNow() {
 /* Bir chip'i başka chip'in üstüne bırakınca doğrudan birleştir (2 element). */
 async function combineByNames(nameA, nameB) {
 	slots = [nameA, nameB];
-	maxSlots = 2;
 	slotResult = "";
 	renderSlots();
 	await combineNow();
@@ -798,7 +798,15 @@ $("#slot-row").addEventListener("click", (ev) => {
 	if (slots[i] !== undefined) { slots.splice(i, 1); slotResult = ""; renderSlots(); }
 });
 $("#slot-add").addEventListener("click", () => { if (maxSlots < 4) { maxSlots++; DB.write("maxSlots", maxSlots); renderSlots(); } });
-$("#slot-remove").addEventListener("click", () => { if (maxSlots > 2) { maxSlots--; DB.write("maxSlots", maxSlots); slots = slots.slice(0, maxSlots); slotResult = ""; renderSlots(); } });
+$("#slot-remove").addEventListener("click", () => {
+	if (maxSlots > 2) {
+		maxSlots--;
+		DB.write("maxSlots", maxSlots);
+		slots.length = Math.min(slots.length, maxSlots);
+		slotResult = "";
+		renderSlots();
+	}
+});
 $("#slot-go").addEventListener("click", combineNow);
 $("#slot-result").addEventListener("click", () => {
 	if (!slotResult) return;
@@ -1249,6 +1257,27 @@ async function renderLeaderboard() {
 
 /* ---------- Element detayı: hikâye + soy ağacı ---------- */
 
+function buildTreeHtml(name, isRoot = false, depth = 0, maxDepth = 3) {
+	const e = getElement(name);
+	if (!e) return `<div class="tree-node${isRoot ? " is-root" : ""}"><button class="node-card" data-name="${escapeHtml(name)}"><span>❓</span> <span>${escapeHtml(name)}</span></button></div>`;
+	
+	const hasParents = e.fromPair && e.fromPair.length > 0 && depth < maxDepth;
+	let html = `<div class="tree-node${isRoot ? " is-root" : ""}">`;
+	html += `<button class="node-card${isRoot ? " root-node" : ""}" data-name="${escapeHtml(e.name)}">`;
+	html += `<span>${e.emoji}</span> <span>${escapeHtml(e.name)}</span>`;
+	html += `</button>`;
+	
+	if (hasParents) {
+		html += `<div class="node-parents">`;
+		e.fromPair.forEach((p) => {
+			html += buildTreeHtml(p, false, depth + 1, maxDepth);
+		});
+		html += `</div>`;
+	}
+	html += `</div>`;
+	return html;
+}
+
 function lineageSteps(name, seen = new Set(), out = []) {
 	const e = getElement(name);
 	if (!e || !e.fromPair || seen.has(norm(name)) || out.length >= 30) return out;
@@ -1331,9 +1360,26 @@ function openDetail(name) {
 		`${rar.emoji} ${rarityName(rar.id)} · ${cat.emoji} ${cat.name} · ${date} tarihinde keşfedildi · derinlik: ${depth}` + (e.firstDiscovery ? " · 🏆 İlk Keşif" : "");
 	const lin = $("#detail-lineage");
 	lin.innerHTML = "";
+	const treeBox = $("#detail-lineage-tree");
+	if (treeBox) {
+		treeBox.innerHTML = buildTreeHtml(e.name, true, 0, 3);
+	}
+	
+	// Reset to Tree View by default
+	const treeBtn = $("#btn-lineage-tree");
+	const listBtn = $("#btn-lineage-list");
+	if (treeBtn) treeBtn.classList.add("active");
+	if (listBtn) listBtn.classList.remove("active");
+	const treeContainer = $("#detail-lineage-tree-container");
+	if (treeContainer) treeContainer.hidden = false;
+	lin.hidden = true;
+
 	const steps = lineageSteps(e.name);
 	if (!steps.length) {
 		lin.innerHTML = "<li><span class='sub'>Bu bir başlangıç elementi — her şey onunla başladı.</span></li>";
+		if (treeBox) {
+			treeBox.innerHTML = `<div class="tree-node is-root"><button class="node-card root-node" data-name="${escapeHtml(e.name)}"><span>${e.emoji}</span> <span>${escapeHtml(e.name)}</span></button><p class="muted" style="margin-top: 8px; font-size: 0.8rem;">${t("startEl")}</p></div>`;
+		}
 	} else {
 		steps.forEach((s) => {
 			const li = document.createElement("li");
@@ -1417,6 +1463,29 @@ $("#detail-lineage").addEventListener("click", (ev) => {
 	const li = ev.target.closest("li[data-name]");
 	if (li) openDetail(li.dataset.name);
 });
+const treeContainer = $("#detail-lineage-tree-container");
+if (treeContainer) {
+	treeContainer.addEventListener("click", (ev) => {
+		const btn = ev.target.closest(".node-card");
+		if (btn && btn.dataset.name) openDetail(btn.dataset.name);
+	});
+}
+const treeBtn = $("#btn-lineage-tree");
+const listBtn = $("#btn-lineage-list");
+if (treeBtn && listBtn) {
+	treeBtn.addEventListener("click", () => {
+		treeBtn.classList.add("active");
+		listBtn.classList.remove("active");
+		if (treeContainer) treeContainer.hidden = false;
+		$("#detail-lineage").hidden = true;
+	});
+	listBtn.addEventListener("click", () => {
+		listBtn.classList.add("active");
+		treeBtn.classList.remove("active");
+		if (treeContainer) treeContainer.hidden = true;
+		$("#detail-lineage").hidden = false;
+	});
+}
 
 /* ---------- Ayarlar ---------- */
 
