@@ -12,6 +12,14 @@ Thumbs.db
 node_modules/
 npm-debug.log
 
+# Python
+__pycache__/
+*.pyc
+vessel-bot/cache/
+vessel-bot/.env
+vessel-bot/shifts.json
+vessel-bot/manual_ships.json
+
 # Compiled site
 /public/
 
